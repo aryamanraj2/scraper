@@ -16,7 +16,7 @@ export const MILESTONE_ORDER = ['F0', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'] 
 export type Milestone = (typeof MILESTONE_ORDER)[number]
 
 /** The milestone this build has shipped. */
-export const MILESTONE_STAGE: Milestone = 'F0'
+export const MILESTONE_STAGE: Milestone = 'F1'
 
 /** The first milestone at which external sending may be enabled at all (Part F). */
 export const SENDING_UNLOCKED_AT: Milestone = 'F5'

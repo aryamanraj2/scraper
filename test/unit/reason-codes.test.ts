@@ -41,11 +41,31 @@ describe('reason-code registry', () => {
     expect(Object.keys(ReasonCode).sort()).toEqual([...ALL_REASON_CODES].sort())
   })
 
-  it('marks the F0-owned codes as reachable and defers the rest', () => {
-    const reachable = reachableReasonCodes('F0')
-    // The preflight refusals, the stage guard, and the three kill-switch scopes are
-    // the failure paths F0 actually implements.
+  it('marks the F1-owned codes as reachable and defers the rest', () => {
+    const reachable = reachableReasonCodes('F1')
+    // F0's preflight refusals, stage guard and three kill-switch scopes, plus the
+    // three F1 ingestion adds: a record that resolves to an already-ingested
+    // company or posting, a source that returned nothing usable, and a posting
+    // whose contentHash matched (moved F2 -> F1; see the registry entry).
     expect(reachable.sort()).toEqual(
+      [
+        'budget_exhausted',
+        'content_unchanged',
+        'duplicate',
+        'host_denied',
+        'kill_switch_account',
+        'kill_switch_domain',
+        'kill_switch_global',
+        'rate_limited',
+        'robots_disallowed',
+        'sending_disabled',
+        'source_unavailable',
+        'terms_prohibited',
+      ].sort(),
+    )
+    // F0's own set stays exactly what it was: bumping the stage adds codes, it
+    // never reclassifies one that already shipped.
+    expect(reachableReasonCodes('F0').sort()).toEqual(
       [
         'budget_exhausted',
         'host_denied',

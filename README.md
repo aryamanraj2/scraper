@@ -5,6 +5,16 @@ credible queue of internship opportunities. It prepares applications and drafts;
 it never sends without explicit human approval, and it never submits an application
 on your behalf.
 
+## Start here
+
+| File | What it is |
+|---|---|
+| `handover.md` | The original brief. §1's non-negotiable policies are binding. |
+| `docs/architecture-plan.md` | The approved architecture plan, verbatim. The implementation contract. |
+| `docs/F1-HANDOVER.md` | What F0 built, every deviation from the plan and why, and the F1 task. |
+| `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. **Point a new session at this.** |
+| `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built at F2. |
+
 Two documents govern this repo:
 
 - **`handover.md`** — the policy spine. §1's non-negotiables are binding: no
@@ -15,10 +25,21 @@ Two documents govern this repo:
   Defect ids (A1–A12) and verification ids (B1–B7) referenced in code comments
   point at it.
 
-## Status: F0 complete
+## Status: F1 complete
 
-F0 ships no ingestion, no scoring, no drafting and no sending. It exists to make
-the later milestones' safeguards structural rather than conventional.
+F0 made the safeguards structural. F1 adds ingestion: a yc-oss seed loader, domain
+canonicalization, ATS detection with Lever slug resolution, and the three required
+adapters — Greenhouse, Lever and Ashby. Still no scoring, no drafting, no sending,
+and no optional adapter.
+
+| F1 exit criterion | Where it is proven |
+|---|---|
+| 100-200 normalized companies | `npm run verify:f1` against `outreach_dev` |
+| Live postings attached | `npm run verify:f1`; `test/integration/ats-ingest.test.ts` |
+| Every field traceable to an `Evidence` row | `test/integration/seed-loader.test.ts`, `test/integration/ats-ingest.test.ts` |
+| No optional adapter built | `npm run verify:f1` scans `src/` |
+| Milestone bumped honestly | `test/unit/reason-codes.test.ts`, `test/policy/reason-code-coverage.test.ts` |
+| Contract tests, fixtures and fakes | `test/integration/ats-adapters.test.ts` |
 
 | F0 exit criterion | Where it is proven |
 |---|---|
@@ -27,7 +48,7 @@ the later milestones' safeguards structural rather than conventional.
 | Secrets round-trip without touching logs | `test/integration/secret-store.test.ts` |
 | No HTTP client reachable outside the gate | `test/policy/no-raw-http.test.ts`, `test/policy/fetch-policy-gate.test.ts` |
 
-Run `npm run verify:f0` for the four criteria in one report.
+Run `npm run verify:f0` and `npm run verify:f1` for the criteria in one report each.
 
 ## Setup
 
@@ -55,6 +76,10 @@ security add-generic-password -s outreach-intelligence -a kek \
 |---|---|
 | `npm test` | AST guard, then the whole suite offline against fixtures |
 | `npm run verify:f0` | The four F0 exit criteria, individually reported |
+| `npm run verify:f1` | The seven F1 exit criteria, individually reported |
+| `npm run ingest:seed` | **Live.** yc-oss seed, ATS detection, postings. `-- --limit 150` |
+| `npm run ingest:seed -- --postings-only` | **Live.** Refresh known boards only; skips the slow detection pass |
+| `npm run fixtures:record` | **Live.** Re-capture one real response per source into `test/fixtures/` |
 | `npm run typecheck` / `npm run lint` | TypeScript and ESLint |
 | `npm run db:migrate` | Apply migrations (dev) |
 | `npm run check:no-raw-http` | Fail if anything outside the gate can reach the network |
@@ -77,6 +102,11 @@ nothing: `src/core/config/stage.ts` carries a `MILESTONE_STAGE` constant that on
 a reviewed commit changes, and sending stays refused with `sending_disabled` until
 it reaches `F5`.
 
+**Only two commands touch a live source**, and neither runs in `npm test`:
+`ingest:seed` and `fixtures:record`. Both go through `FetchPolicyGate`, so a
+fixture can never describe a capability the pipeline does not have. Everything else
+replays `test/fixtures/` through undici's `MockAgent` with net connect disabled.
+
 ## Layout
 
 ```
@@ -88,5 +118,12 @@ src/core/logging/             redaction applied at the sink
 src/core/policy/              FetchPolicyGate, host lists, robots, rate, budget
 src/core/queue/               pg-boss bootstrap + transactional enqueue
 src/core/interfaces/          provider seams (F1-F5) and the deferred browser seam (F7)
-tools/                        AST guard, F0 verifier, host-policy seeder
+src/core/evidence/            content hashing and the provenance writer
+src/ingest/domain/            canonicalization (registrable domain, PSL-backed)
+src/ingest/yc/                yc-oss SeedProvider and the seed loader
+src/ingest/ats/               detection signatures + Greenhouse/Lever/Ashby adapters
+src/ingest/host/              the derived_company host allow rows F1 owes the gate
+src/ingest/budget/            per-company research envelopes (H5)
+test/fixtures/                real responses, captured through the gate
+tools/                        AST guard, verifiers, seeders, fixture recorder
 ```

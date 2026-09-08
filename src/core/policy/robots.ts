@@ -2,6 +2,7 @@ import robotsParser from 'robots-parser'
 import type { Db } from '../audit/audit-log.js'
 import { rawGet } from './http/raw-client.js'
 import { normalizeHost } from './host-lists.js'
+import { isSameSite } from './registrable-domain.js'
 
 export type RobotsVerdict = {
   allowed: boolean
@@ -30,6 +31,16 @@ export type RobotsOptions = {
  * common default (absent robots means crawl freely) is wrong for this system,
  * because the hosts we reach without an explicit allow entry are exactly the ones
  * we know least about.
+ *
+ * That asymmetry only produces honest answers if we actually READ the file. A
+ * `robots.txt` served with a 30x — overwhelmingly apex-to-`www` — was previously
+ * recorded as unparseable and therefore refused, so `robots_disallowed` came to
+ * mean "the host redirected" for 19 of the first 45 hosts F1 tried. Wrong twice
+ * over: it silently dropped permitted sources, and it corrupted the very
+ * refusal counter Part G relies on to notice a source disappearing behind a
+ * policy change. Redirects are now followed, bounded, and only within the same
+ * registrable domain — a `robots.txt` that points at somebody else's site does
+ * not speak for this one, and is treated as restrictive.
  */
 export async function checkRobots(
   db: Db,
@@ -48,27 +59,11 @@ export async function checkRobots(
     return evaluate(cached.body, cached.parseOk, url, opts, 'cache')
   }
 
-  let body = ''
-  let parseOk = false
-  let statusCode: number | null = null
-  try {
-    const res = await rawGet(`${parsed.protocol}//${parsed.host}/robots.txt`, {
-      userAgent: opts.userAgent,
-      maxBytes: 512 * 1024,
-    })
-    statusCode = res.statusCode
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      body = res.body
-      parseOk = true
-    } else if (res.statusCode >= 400 && res.statusCode < 500) {
-      // 404 means "no rules published". That is permission only for a host we
-      // already decided to allow explicitly; see evaluate().
-      body = ''
-      parseOk = true
-    }
-  } catch {
-    parseOk = false
-  }
+  const fetched = await fetchRobotsFollowingRedirects(
+    `${parsed.protocol}//${parsed.host}/robots.txt`,
+    opts.userAgent,
+  )
+  const { body, parseOk, statusCode } = fetched
 
   await db.robotsCache.upsert({
     where: { host },
@@ -77,6 +72,74 @@ export async function checkRobots(
   })
 
   return evaluate(body, parseOk, url, opts, 'network')
+}
+
+const ROBOTS_MAX_BYTES = 512 * 1024
+const ROBOTS_MAX_REDIRECTS = 3
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308])
+
+/**
+ * Fetches `robots.txt`, following same-site redirects.
+ *
+ * Redirects are followed here rather than by an undici interceptor for the same
+ * reason as everywhere else in this system: an automatically-followed redirect
+ * lands somewhere nobody checked. Each hop is re-derived and re-checked against
+ * the original host's registrable domain before it is issued, and a cross-site
+ * hop ends the walk with `parseOk = false` — restrictive.
+ *
+ * A 4xx keeps its existing meaning: "no rules published", which `evaluate` treats
+ * as permission ONLY for a host we already decided to allow explicitly.
+ */
+async function fetchRobotsFollowingRedirects(
+  startUrl: string,
+  userAgent: string,
+): Promise<{ body: string; parseOk: boolean; statusCode: number | null }> {
+  const originHost = new URL(startUrl).host
+  let url = startUrl
+  let statusCode: number | null = null
+
+  for (let hop = 0; hop <= ROBOTS_MAX_REDIRECTS; hop += 1) {
+    let res
+    try {
+      res = await rawGet(url, { userAgent, maxBytes: ROBOTS_MAX_BYTES })
+    } catch {
+      return { body: '', parseOk: false, statusCode }
+    }
+    statusCode = res.statusCode
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      // A truncated robots file is worse than none: the rule that would have
+      // disallowed us may be in the part we did not read.
+      if (res.truncated) return { body: '', parseOk: false, statusCode }
+      return { body: res.body, parseOk: true, statusCode }
+    }
+    if (res.statusCode >= 400 && res.statusCode < 500) {
+      return { body: '', parseOk: true, statusCode }
+    }
+    if (!REDIRECT_CODES.has(res.statusCode)) {
+      return { body: '', parseOk: false, statusCode }
+    }
+
+    const raw = res.headers['location']
+    const location = Array.isArray(raw) ? raw[0] : raw
+    if (!location) return { body: '', parseOk: false, statusCode }
+
+    let next: URL
+    try {
+      next = new URL(location, url)
+    } catch {
+      return { body: '', parseOk: false, statusCode }
+    }
+    if (next.protocol !== 'https:' && next.protocol !== 'http:') {
+      return { body: '', parseOk: false, statusCode }
+    }
+    if (!isSameSite(next.host, originHost)) {
+      return { body: '', parseOk: false, statusCode }
+    }
+    url = next.toString()
+  }
+
+  return { body: '', parseOk: false, statusCode }
 }
 
 function evaluate(

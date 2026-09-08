@@ -1,0 +1,8 @@
+{
+  "url": "https://yc-oss.github.io/api/companies/all.json",
+  "statusCode": 200,
+  "recordedAt": "2026-09-08T17:29:52.482Z",
+  "sliced": true,
+  "note": "Full YC index. Sliced to the first 10 records purely to keep the fixture reviewable.",
+  "contentHash": "b6f0da96526ad8cffb25f54d7c58e102525a2645573837c55af613bbf883e460"
+}

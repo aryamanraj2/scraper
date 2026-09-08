@@ -1,0 +1,8 @@
+{
+  "url": "https://yc-oss.github.io/api/meta.json",
+  "statusCode": 200,
+  "recordedAt": "2026-09-08T17:26:09.218Z",
+  "sliced": false,
+  "note": "yc-oss index metadata: counts and the list of published feeds.",
+  "contentHash": "19ff11ada04614adefe0d25559053b463dcdea5f10b6151e7808dc284af3bdc4"
+}

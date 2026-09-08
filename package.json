@@ -17,7 +17,10 @@
     "test": "npm run check:no-raw-http && vitest run",
     "test:watch": "vitest",
     "verify:f0": "tsx tools/verify-f0.ts",
-    "seed:hosts": "tsx tools/seed-host-policies.ts"
+    "seed:hosts": "tsx tools/seed-host-policies.ts",
+    "fixtures:record": "tsx tools/record-fixtures.ts",
+    "verify:f1": "tsx tools/verify-f1.ts",
+    "ingest:seed": "tsx tools/run-seed-ingest.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
@@ -25,7 +28,8 @@
     "pg": "8.23.0",
     "pg-boss": "12.30.0",
     "robots-parser": "3.0.1",
-    "undici": "7.16.0",
+    "tldts": "7.4.12",
+    "undici": "7.29.1",
     "zod": "4.5.4"
   },
   "devDependencies": {

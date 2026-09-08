@@ -1,0 +1,1705 @@
+[
+  {
+    "id": 5,
+    "name": "CircuitHub",
+    "slug": "circuithub",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/5967d06c7b101af8570dc47b6eea5cd8567dd32b.png",
+    "website": "https://circuithub.com",
+    "all_locations": "London, England, United Kingdom",
+    "long_description": "CircuitHub offers on-demand electronics manufacturing powered by our factory-scale robotics platform, The Grid. This platform delivers a 10x improvement in the speed and cost of small-batch electronics production. Leading customers like Tesla, NASA, and Zipline rely on CircuitHub to cut their time to market in half.",
+    "one_liner": "On-Demand Electronics Manufacturing",
+    "team_size": 58,
+    "industry": "Industrials",
+    "subindustry": "Industrials -> Manufacturing and Robotics",
+    "launched_at": 1322045523,
+    "tags": [
+      "Hard Tech",
+      "Hardware",
+      "Robotics",
+      "Manufacturing",
+      "Automation"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2012",
+    "status": "Active",
+    "industries": [
+      "Industrials",
+      "Manufacturing and Robotics"
+    ],
+    "regions": [
+      "United Kingdom",
+      "Europe",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/circuithub",
+    "api": "https://yc-oss.github.io/api/batches/winter-2012/circuithub.json"
+  },
+  {
+    "id": 19,
+    "name": "Rescale",
+    "slug": "rescale",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/711fea8d5911eff2cca6ae58f7c2371f123c9dc1.png",
+    "website": "https://rescale.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Rescale is a cloud-based platform for computational engineering and R&D, that empowers engineers and researchers to accelerate discovery, testing, and optimization. We democratize access to the latest technologies that drive greater efficiency and competitiveness, including high performance computing, simulation, modeling, AI/ML, and digital twins.\r\n\r\nThe majority of industry leaders worldwide use Rescale as the backbone of R&D, connecting the digital thread of new product innovation to develop products that enrich humanity, from autonomous vehicles to drug discovery. Rescale customers include 7 of the top 10 automotive companies and 3 of the top 6 life science companies.\r\n\r\nRescale’s full-stack, open platform automates systems, data, and workflows into a user-centric experience, so customers can focus on innovation. Choose from 1000+ pre-installed applications for multiphysics simulation and AI/ML-assisted design exploration, including commercial, open-source, and custom software. We offer the largest global network of hyperscale and specialty cloud infrastructure to leverage the latest CPU, GPU, and other specialized architectures.\r\n\r\nRescale is enterprise-ready to enable any size organization to achieve their digital transformation goals–with unified management that gives IT teams full visibility and control of hybrid-cloud operations. Rescale’s intelligent automation gives customers flexibility to improve performance and reduce costs of computing, while our enhanced security and compliance ensures industry-leading standards are met from end to end.\r\n\r\nGetting started is simple, flexible, and free to try. Our team of experts is ready to help you achieve your most ambitious engineering goals – schedule a demo today.\r\n\r\nJoin us and help us build products that change the world: www.rescale.com/careers",
+    "one_liner": "High Performance Computing Built for the Cloud",
+    "team_size": 250,
+    "industry": "B2B",
+    "subindustry": "B2B -> Engineering, Product and Design",
+    "launched_at": 1322045674,
+    "tags": [
+      "Cloud Computing"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2012",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Engineering, Product and Design"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": true,
+    "url": "https://www.ycombinator.com/companies/rescale",
+    "api": "https://yc-oss.github.io/api/batches/winter-2012/rescale.json"
+  },
+  {
+    "id": 24,
+    "name": "Gusto",
+    "slug": "gusto",
+    "former_names": [
+      "ZenPayroll"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/6ce7845c2e268525f5f04915212ac0a106fb7e3d.png",
+    "website": "https://gusto.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Launched in 2012 as ZenPayroll, Gusto serves more than 300,000 businesses nationwide. Each year we process tens of billions of dollars of payroll and provide employee benefits—like health insurance and 401(k) accounts—while helping companies create incredible work places.\r\n\r\nThrough one refreshingly easy, integrated platform, we automate and simplify your payroll, benefits, and HR, all while providing expert support. You and your employees will get the peace of mind you need to do your best work.",
+    "one_liner": "Provides growing businesses with everything to take care of their team",
+    "team_size": 2400,
+    "industry": "B2B",
+    "subindustry": "B2B -> Human Resources",
+    "launched_at": 1322045716,
+    "tags": [
+      "B2B",
+      "Payroll",
+      "Health Insurance"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2012",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Human Resources"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": true,
+    "url": "https://www.ycombinator.com/companies/gusto",
+    "api": "https://yc-oss.github.io/api/batches/winter-2012/gusto.json"
+  },
+  {
+    "id": 40,
+    "name": "Amplitude",
+    "slug": "amplitude",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/fa98c8a53255b3fd2e9d4a65dbb47eec293729f1.png",
+    "website": "https://amplitude.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Since graduating from YC, Amplitude (W12) has made it to IPO and beyond by helping cutting edge startups become category leaders. We’ve pioneered the digital analytics category to become the go-to solution for AI pioneers (Cruise, Midjourney), apps that touch millions of consumers (Doordash, Coinbase), and the best in B2B (Atlassian, Rippling, Canva).  \r\n\r\nWith product analytics, experiment, CDP, session replay, and more, Amplitude’s digital analytics platform shows you what your users love, where they’re getting stuck, and what keeps them coming back. You want to build a generational business, and we have the capabilities and pricing plans to guide you every step of the way. Check out our special deal for YC companies and get started on your analytics journey. ",
+    "one_liner": "Digital Analytics Platform",
+    "team_size": 750,
+    "industry": "B2B",
+    "subindustry": "B2B -> Analytics",
+    "launched_at": 1322045852,
+    "tags": [
+      "Developer Tools",
+      "B2B",
+      "Analytics",
+      "Marketing",
+      "Data Visualization"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2012",
+    "status": "Public",
+    "industries": [
+      "B2B",
+      "Analytics"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/amplitude",
+    "api": "https://yc-oss.github.io/api/batches/winter-2012/amplitude.json"
+  },
+  {
+    "id": 64,
+    "name": "Y Combinator",
+    "slug": "y-combinator",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/2db694dd7905db37d037821a2fdaf9fa0708a964.png",
+    "website": "https://www.ycombinator.com",
+    "all_locations": "",
+    "long_description": "Make something people want.",
+    "one_liner": "Make something people want.",
+    "team_size": 100,
+    "industry": "Fintech",
+    "subindustry": "Fintech",
+    "launched_at": 1322046644,
+    "tags": [],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Unspecified",
+    "status": "Active",
+    "industries": [
+      "Fintech"
+    ],
+    "regions": [
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/y-combinator",
+    "api": "https://yc-oss.github.io/api/batches/unspecified/y-combinator.json"
+  },
+  {
+    "id": 72,
+    "name": "Apollo",
+    "slug": "apollo",
+    "former_names": [
+      "Meteor",
+      "Apollo",
+      "Apollo M"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/3d684926422fe826a03f5d68cd83bdb413d1c454.png",
+    "website": "http://apollographql.com/",
+    "all_locations": "San Francisco, CA, USA; Remote",
+    "long_description": "Apollo GraphQL is the leader in open source and commercial GraphQL technologies. Apollo’s open-source GraphQL client, server, and gateway are downloaded more than 17M times per month and used in production by over 30% of the Fortune 500. Customers like Walmart, Expedia, Glassdoor, Audi, and PayPal, use the Apollo Graph Platform to unify their GraphQL efforts, collaborate on graph development, and safely iterate on their graphs. Based in San Francisco, Apollo is backed by Insight Partners, Andreessen Horowitz, Matrix Partners, Trinity Ventures, Y Combinator and individual investors.",
+    "one_liner": "Apollo helps engineering teams accelerate delivery",
+    "team_size": 200,
+    "industry": "B2B",
+    "subindustry": "B2B -> Infrastructure",
+    "launched_at": 1326788979,
+    "tags": [
+      "Developer Tools",
+      "Open Source",
+      "GraphQL"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Infrastructure"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/apollo",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/apollo.json"
+  },
+  {
+    "id": 73,
+    "name": "HackerRank",
+    "slug": "hackerrank",
+    "former_names": [
+      "Interviewstreet"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/6df4cc84a7b27db9480fd2d7bff6fa62ff56aacb.png",
+    "website": "http://hackerrank.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "At HackerRank, our mission is to change the world to value skills over pedigree.\r\n\r\nThousands of companies use our AI-powered platform to hire next-gen developers based on what they can do - not just what’s on their resume. From hiring to upskilling, we help teams identify and grow technical talent at every stage of the developer journey.\r\n\r\nOver 26 million developers have joined the HackerRank Community to learn and certify their skills, practice interviewing, and discover relevant jobs.\r\n",
+    "one_liner": "Change the world to value skills over pedigree",
+    "team_size": 300,
+    "industry": "B2B",
+    "subindustry": "B2B -> Recruiting and Talent",
+    "launched_at": 1326788989,
+    "tags": [
+      "Developer Tools",
+      "Recruiting"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Recruiting and Talent"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/hackerrank",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/hackerrank.json"
+  },
+  {
+    "id": 76,
+    "name": "OneSignal",
+    "slug": "onesignal",
+    "former_names": [
+      "Hiptic"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/e909ca477c49ecc4630b711eb00e53523cd42a90.png",
+    "website": "https://onesignal.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "OneSignal is the leading omnichannel customer engagement solution, powering personalized customer journeys across mobile and web push notifications, in-app messaging, SMS, and email. Our easy-to-use interface empowers content creators to focus on quality user engagement instead of complex implementation.\r\n\r\nOur powerful platform enables over a million businesses to deliver 10 billion messages daily and 1 in 7 new apps launches using OneSignal! We support companies in 140 countries, including Zynga, USA Today, Bitcoin.com, Upwork, Tribune, and many more - from startups and small businesses just getting off the ground to established companies communicating with millions of customers.",
+    "one_liner": "Engage customers through personalized omni-channel messaging",
+    "team_size": 150,
+    "industry": "B2B",
+    "subindustry": "B2B -> Marketing",
+    "launched_at": 1326789019,
+    "tags": [
+      "Developer Tools",
+      "SaaS",
+      "B2B",
+      "Messaging",
+      "Marketing"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Marketing"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/onesignal",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/onesignal.json"
+  },
+  {
+    "id": 82,
+    "name": "Streak",
+    "slug": "streak",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/34b83cec1f2ebdc9cb570890712a93e354509aec.png",
+    "website": "http://streak.com",
+    "all_locations": "San Francisco, CA, USA; Remote",
+    "long_description": "Streak is the only CRM integrated entirely within your Gmail inbox, and works alongside all your other G Suite applications. It can be used to track any business process including sales, partnerships, support, hiring, deal flow, and much more. Streak also includes a powerful set of email tools including email tracking, send later, snoozing, mail merge, and more.",
+    "one_liner": "Streak transforms Gmail into a powerful CRM",
+    "team_size": 35,
+    "industry": "B2B",
+    "subindustry": "B2B -> Sales",
+    "launched_at": 1326789125,
+    "tags": [
+      "SaaS"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Sales"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/streak",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/streak.json"
+  },
+  {
+    "id": 85,
+    "name": "Quartzy",
+    "slug": "quartzy",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/4040613ddc6090974d404ee7a77c5ebad60a1e10.png",
+    "website": "https://www.quartzy.com",
+    "all_locations": "San Francisco, CA, USA; Hayward, CA, USA",
+    "long_description": "The world’s No. 1 lab management platform. We help scientists easily organize orders, manage inventory, and save money.",
+    "one_liner": "Marketplace for life science supplies.",
+    "team_size": 100,
+    "industry": "Healthcare",
+    "subindustry": "Healthcare -> Healthcare IT",
+    "launched_at": 1326789155,
+    "tags": [
+      "SaaS",
+      "B2B",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "Healthcare",
+      "Healthcare IT"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/quartzy",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/quartzy.json"
+  },
+  {
+    "id": 90,
+    "name": "AgileMD",
+    "slug": "agilemd",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/809b12f827ff69a7f32abee89d407ac3eac9359d.png",
+    "website": "https://agilemd.com",
+    "all_locations": "San Francisco, CA, USA; Remote",
+    "long_description": "At AgileMD, we are building the most advanced real-time predictive analytics and clinical algorithms platform for hospitals. Our cloud-based engine helps thousands of doctors and nurses around the country make medical decisions, so that every patient receives the highest quality and value of care based on the latest medical knowledge and data.",
+    "one_liner": "Predictive analytics and clinical pathways for hospitals ",
+    "team_size": 19,
+    "industry": "Healthcare",
+    "subindustry": "Healthcare -> Healthcare IT",
+    "launched_at": 1326789206,
+    "tags": [
+      "Machine Learning",
+      "Healthcare"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "Healthcare",
+      "Healthcare IT"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/agilemd",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/agilemd.json"
+  },
+  {
+    "id": 102,
+    "name": "Sift",
+    "slug": "sift",
+    "former_names": [
+      "Sift Science",
+      "Sift",
+      "Sift Science"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/4eb5f9ca677956a27183ce3ae798b02616a1e3e2.png",
+    "website": "https://sift.com/",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Sift is the leader in Digital Trust & Safety, empowering digital disruptors to Fortune 500 companies to unlock new revenue without risk. Sift dynamically prevents fraud and abuse through industry-leading technology and expertise, an unrivaled global data network of 70 billion events per month, and a commitment to long-term customer partnerships. Global brands such as DoorDash, Twitter, and Wayfair rely on Sift to gain a competitive advantage in their markets. \r\n",
+    "one_liner": "The Leader in Digital Trust & Safety",
+    "team_size": null,
+    "industry": "B2B",
+    "subindustry": "B2B -> Security",
+    "launched_at": 1326789337,
+    "tags": [
+      "Fintech",
+      "Machine Learning",
+      "SaaS",
+      "B2B"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Security"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/sift",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/sift.json"
+  },
+  {
+    "id": 110,
+    "name": "MixRank",
+    "slug": "mixrank",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/98189b51f5b6f25d164e611f2ea6a3c5f972de3f.png",
+    "website": "https://mixrank.com",
+    "all_locations": "Toronto, ON, Canada; Remote",
+    "long_description": "MixRank processes petabytes of data every month from web crawls, Google Play Store, Apple App Store, social media, and dozens of other sources. We have hundreds of customers using our data products including Google, Amazon, Facebook, Intel, and Adobe, across industries Sales, Marketing, Finance, and Security.",
+    "one_liner": "Data products for sales, marketing, finance, recruiting, and more.",
+    "team_size": 31,
+    "industry": "B2B",
+    "subindustry": "B2B",
+    "launched_at": 1326789427,
+    "tags": [
+      "SaaS",
+      "B2B"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2011",
+    "status": "Active",
+    "industries": [
+      "B2B"
+    ],
+    "regions": [
+      "Canada",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/mixrank",
+    "api": "https://yc-oss.github.io/api/batches/summer-2011/mixrank.json"
+  },
+  {
+    "id": 164,
+    "name": "Mino Games",
+    "slug": "mino-games",
+    "former_names": [
+      "Minomonsters"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/573373ab6401e76024bab0260b4ba1cd64b7a1fe.png",
+    "website": "http://minomonsters.com",
+    "all_locations": "San Francisco, CA, USA; Montreal, QC, Canada",
+    "long_description": "Top-25 grossing mobile gaming studio. Backed by Andreessen Horowitz and Y Combinator. ",
+    "one_liner": "Mobile games company",
+    "team_size": 11,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Gaming",
+    "launched_at": 1326789959,
+    "tags": [
+      "Gaming"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2011",
+    "status": "Active",
+    "industries": [
+      "Consumer",
+      "Gaming"
+    ],
+    "regions": [
+      "United States of America",
+      "Canada",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/mino-games",
+    "api": "https://yc-oss.github.io/api/batches/winter-2011/mino-games.json"
+  },
+  {
+    "id": 168,
+    "name": "GOAT Group",
+    "slug": "goat-group",
+    "former_names": [
+      "Airgoat",
+      "was Superb",
+      "was Grub With Us",
+      "GOAT"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/4f3a455935f36a6655742aae286b206df1cd13bd.png",
+    "website": "https://www.goatgroup.com/",
+    "all_locations": "Los Angeles, CA, USA",
+    "long_description": "GOAT Group represents the leading platforms for authentic sneakers, apparel and accessories. Operating four distinct brands–GOAT, Flight Club, Grailed and alias–GOAT Group has a global community of over 50M members across 170 countries.\r\n\r\nWe are backed by some of the leading names in venture capital including Accel Partners, Andreessen Horowitz, Index Ventures, Matrix Partners, NEA, SV Angel, Upfront Ventures, Webb Investment Network and Y Combinator.",
+    "one_liner": "Platform for the greatest products from the past, present and future.",
+    "team_size": 1600,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Apparel and Cosmetics",
+    "launched_at": 1326789988,
+    "tags": [
+      "Marketplace"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2011",
+    "status": "Active",
+    "industries": [
+      "Consumer",
+      "Apparel and Cosmetics"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": true,
+    "url": "https://www.ycombinator.com/companies/goat-group",
+    "api": "https://yc-oss.github.io/api/batches/winter-2011/goat-group.json"
+  },
+  {
+    "id": 240,
+    "name": "Stripe",
+    "slug": "stripe",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/e5ccedd9995f6524b4a0379062eb67f7c991613e.png",
+    "website": "http://stripe.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Launched out of Y Combinator’s 2009 Summer batch, Stripe is a global technology company that builds economic infrastructure for the internet. Businesses of every size—from new startups to public companies—use our software to accept payments and manage their businesses online Stripe is a proud partner of YC companies—from Airbnb (S09) to Defog (W23)—to help them grow their businesses and increase the GDP of the internet.",
+    "one_liner": "Economic infrastructure for the internet.",
+    "team_size": 7000,
+    "industry": "Fintech",
+    "subindustry": "Fintech",
+    "launched_at": 1326790584,
+    "tags": [
+      "Banking as a Service",
+      "Fintech",
+      "SaaS"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2009",
+    "status": "Active",
+    "industries": [
+      "Fintech"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/stripe",
+    "api": "https://yc-oss.github.io/api/batches/summer-2009/stripe.json"
+  },
+  {
+    "id": 258,
+    "name": "RentHop",
+    "slug": "renthop",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/1d46a914ebd920dcb8bc39852cc8704c1b4ef08f.png",
+    "website": "http://renthop.com",
+    "all_locations": "New York City, NY, USA; New York, NY, USA",
+    "long_description": "RentHop (www.renthop.com) helps renters find great apartments.  We use sophisticated data analysis to rank apartment listings based on their \"freshness\"​, their accuracy and completeness and the responsiveness of the manager who listed the apartment on our site.  \r\n\r\nAs a renter, you can use list-based or map-based search tools to browse listings and comprehensive search filters to narrow our 100,000+ listings to just the ones you want.  It’s easy and fast to reach out to brokers and property managers to schedule viewings and to manage responses.\r\n\r\nYou can also use our innovative \"Appointments on Demand\"​ feature, a map showing the real-time locations of brokers and property managers available to show apartments, to reach out and schedule viewings on the fly! \r\n\r\nFor brokers and property managers, RentHop provides a cost-effective, easy-to-use tool to promote your listings, get qualified leads and schedule viewings.  You can also post and repost listings on the go using RentHop Manager, our mobile app for brokers and property managers, currently available in the iOS App Store.  (You can download the mobile app at https://itunes.apple.com/us/app/renthop-manager/id695651355.)\r\n\r\nYour commitment to give good service will make you stand out on RentHop - our algorithm will credit you for your responsiveness and help give your listings the boost they need to get seen - and rented - by qualified renters.\r\n \r\nLook for our mobile app for consumers, due out soon!\r\n\r\nAnd please let us know any questions, thoughts or comments you may have - we'll look forward to hearing from you!  You can reach us at feedback@renthop.com.  You can also find us on Facebook, Twitter (@RentHop), Google+ and Pinterest.",
+    "one_liner": "Apartment rental marketplace",
+    "team_size": 9,
+    "industry": "Real Estate and Construction",
+    "subindustry": "Real Estate and Construction -> Housing and Real Estate",
+    "launched_at": 1326790743,
+    "tags": [
+      "Marketplace",
+      "Real Estate"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2009",
+    "status": "Active",
+    "industries": [
+      "Real Estate and Construction",
+      "Housing and Real Estate"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/renthop",
+    "api": "https://yc-oss.github.io/api/batches/summer-2009/renthop.json"
+  },
+  {
+    "id": 270,
+    "name": "Volantio",
+    "slug": "volantio",
+    "former_names": [
+      "Adioso"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/cf9bb5e6e2675a17e58680fdafb1e6a3bef6c968.png",
+    "website": "http://www.volantio.com",
+    "all_locations": "Atlanta, GA, USA",
+    "long_description": "Volantio is a leader in travel technology software focused on revenue and capacity optimization for airlines.  \r\n\r\nBased in Atlanta, GA, Volantio partners with major airlines globally such as Qantas, Iberia, Alaska Airlines, Volaris, Jetstar Airways, Emirates, Ethiopian Airlines, Scoot-Tigerair, and others. \r\n\r\nThe company’s Yana platform enables airlines to generate incremental revenue and reduce operational costs, while putting greater predictability and control back into the hands of their customers.\r\n\r\nWe are backed by institutional and strategic investors from around the world including Ingleside Investors, JetBlue Technology Ventures, International Airlines Group (IAG), and Qantas Ventures.",
+    "one_liner": "Post-booking revenue and capacity optimization for airlines…",
+    "team_size": 19,
+    "industry": "B2B",
+    "subindustry": "B2B -> Marketing",
+    "launched_at": 1326790848,
+    "tags": [
+      "Airlines"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2009",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Marketing"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/volantio",
+    "api": "https://yc-oss.github.io/api/batches/winter-2009/volantio.json"
+  },
+  {
+    "id": 409,
+    "name": "Zentail",
+    "slug": "zentail",
+    "former_names": [
+      "HD Trade Services"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/3c3eb0d479545e3450db0e386dc8aa5148e22711.png",
+    "website": "https://zentail.com",
+    "all_locations": "Columbia, MD, USA",
+    "long_description": "Zentail makes adding online sales channels  for ecommerce brands as simple as adding a friend on Facebook.  Our mission is to make ecommerce simple and we do it with our ecommerce network that automates away all of the work getting a listing formatted for different marketplaces with different requirements. ",
+    "one_liner": "We're making ecommerce simple connecting brands with sales channels",
+    "team_size": 30,
+    "industry": "B2B",
+    "subindustry": "B2B -> Supply Chain and Logistics",
+    "launched_at": 1336096681,
+    "tags": [
+      "SaaS",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2012",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Supply Chain and Logistics"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/zentail",
+    "api": "https://yc-oss.github.io/api/batches/summer-2012/zentail.json"
+  },
+  {
+    "id": 442,
+    "name": "Zapier",
+    "slug": "zapier",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/59fbaea3a4a565dd0eb1b1228ea2d6fd35e22ad8.png",
+    "website": "http://zapier.com",
+    "all_locations": "San Francisco, CA, USA; Mountain View, CA, USA; Remote",
+    "long_description": "Founded in 2011, Zapier is the #1 workflow automation platform for small and mid-sized businesses. By connecting more than 6,000 of the most popular work apps, Zapier empowers its users to make the most of the tools they already use—and to focus on what matters most.",
+    "one_liner": "The easiest way to automate your work.",
+    "team_size": 700,
+    "industry": "B2B",
+    "subindustry": "B2B -> Productivity",
+    "launched_at": 1336096965,
+    "tags": [
+      "SaaS",
+      "B2B",
+      "Automation"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2012",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Productivity"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": true,
+    "url": "https://www.ycombinator.com/companies/zapier",
+    "api": "https://yc-oss.github.io/api/batches/summer-2012/zapier.json"
+  },
+  {
+    "id": 468,
+    "name": "Instacart",
+    "slug": "instacart",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/9750fca21baaee75e035f1baaf58df8e2f5dcc67.png",
+    "website": "https://www.instacart.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Instacart is the North American leader in online grocery and one of the fastest-growing companies in e-commerce. Instacart’s same-day delivery and pickup services bring fresh groceries and everyday essentials to busy people and families across the U.S. and Canada in as fast as an hour. Since its founding in 2012, Instacart has become an essential service for millions of families, while also serving as an immediate, flexible earnings opportunity for hundreds of thousands of shoppers across North America.  The company partners with more than 350 retailers and delivers from more than 25,000 stores across more than 5,500 cities in North America. Today, Instacart is accessible to more than 85% of households in the U.S. and more than 70% of households in Canada.",
+    "one_liner": "Marketplace for grocery delivery and pickup",
+    "team_size": 3000,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Food and Beverage",
+    "launched_at": 1340213784,
+    "tags": [
+      "Grocery",
+      "Delivery",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2012",
+    "status": "Public",
+    "industries": [
+      "Consumer",
+      "Food and Beverage"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/instacart",
+    "api": "https://yc-oss.github.io/api/batches/summer-2012/instacart.json"
+  },
+  {
+    "id": 481,
+    "name": "Padlet",
+    "slug": "padlet",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/645d902ed813d617206c22ce485d48419ccb91c1.png",
+    "website": "https://padlet.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "We are easily bored. It's the one thing that unites humanity in 2020. No one wants to read twenty paragraphs of text, or sit through forty verbose slides. Yet, we keep making them, boring everyone out of their minds.\r\n\r\nWe are building more beautiful and fun alternatives to traditional documents. They're less of a pain-in-the-ass to create, and a lot less waterboard-y to view.\r\n\r\nCheckout a Padlet timeline (https://padl.et/timeline), or a Padlet map (https://padl.et/map) to see what we're talking about. \r\n\r\nOver ten million people all over the world use Padlet. Most satisfyingly, for millions of kids, Padlet is their first experience of creating things on the Internet.\r\n\r\nPeople say we are improving education. People say we are making them more creative. People say a lot of things.",
+    "one_liner": "Papyrus → Parchment → Paper → Padlet",
+    "team_size": 65,
+    "industry": "B2B",
+    "subindustry": "B2B -> Productivity",
+    "launched_at": 1354492697,
+    "tags": [
+      "Education",
+      "SaaS"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Productivity"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/padlet",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/padlet.json"
+  },
+  {
+    "id": 488,
+    "name": "Etleap",
+    "slug": "etleap",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/07c9b19241da3d7897596f5f34b6c9baa7c7518e.png",
+    "website": "https://etleap.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Etleap is an ETL solution for creating perfect data pipelines from day one. Unlike other enterprise solutions, Etleap doesn’t require extensive engineering work to set up, maintain, and scale. It automates most ETL setup and maintenance work, and simplifies the rest into 10-minute tasks that analysts can own.",
+    "one_liner": "Etleap is an ETL solution for creating perfect data pipelines. ",
+    "team_size": 11,
+    "industry": "B2B",
+    "subindustry": "B2B -> Infrastructure",
+    "launched_at": 1354492752,
+    "tags": [
+      "Data Engineering"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Infrastructure"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/etleap",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/etleap.json"
+  },
+  {
+    "id": 490,
+    "name": "InfluxData",
+    "slug": "influxdata",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/52f8bfabfa73534a4e180ab67b04914310f2a95e.png",
+    "website": "https://influxdata.com",
+    "all_locations": "New York City, NY, USA; San Francisco, CA, USA; Remote",
+    "long_description": "InfluxData, the creators of InfluxDB, delivers a modern Open Source Platform built from the ground up for analyzing metrics and events (time series data) for DevOps and IoT applications. Whether the data comes from humans, sensors, or machines, InfluxData empowers developers to build next-generation monitoring, analytics, and IoT applications faster, easier, and to scale delivering real business value quickly. Based in San Francisco, InfluxData customers include Autodesk, Cisco, eBay, and Coupa. Visit https://www.influxdata.com.",
+    "one_liner": "The platform for building and operating time series applications.",
+    "team_size": 210,
+    "industry": "B2B",
+    "subindustry": "B2B -> Infrastructure",
+    "launched_at": 1354492765,
+    "tags": [
+      "Analytics",
+      "Open Source",
+      "Time Series",
+      "Databases"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Infrastructure"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Fully Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/influxdata",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/influxdata.json"
+  },
+  {
+    "id": 493,
+    "name": "RADAR",
+    "slug": "radar",
+    "former_names": [
+      "Skip",
+      "Automaton",
+      "NoQ"
+    ],
+    "small_logo_thumb_url": "/company/thumb/missing.png",
+    "website": "https://goradar.com",
+    "all_locations": "New York City, NY, USA",
+    "long_description": "RADAR is an RF Sensing platform built to automate and augment retail store processes. Our technology offers unprecedented speed and location accuracy, which allows stores to:\r\n\r\n1) Manage inventory efficiently, through automated inventory counts, improved in-store replenishment and instantaneous customer stock checks\r\n\r\n2) Eliminate checkout lines altogether through our autonomous checkout tool.\r\n\r\n3) Measure all customer-product interactions, giving physical stores the same insight into consumer behavior and product performance as online stores.\r\n\r\nhttps://goradar.com",
+    "one_liner": "RADAR is building technology to completely transform the in-store…",
+    "team_size": 120,
+    "industry": "B2B",
+    "subindustry": "B2B -> Retail",
+    "launched_at": 1354492792,
+    "tags": [
+      "Retail Tech",
+      "AI"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Retail"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/radar",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/radar.json"
+  },
+  {
+    "id": 500,
+    "name": "SimplyInsured",
+    "slug": "simplyinsured",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/abf7da0c7c74c34ef88b12b8b2f38161aac9adcb.png",
+    "website": "http://simplyinsured.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "SimplyInsured was founded with one mission: to eliminate fear from health insurance. By changing the way small business owners purchase health insurance with our 100% online platform, we’re transforming a $20 billion dollar industry and delighting thousands of customers. \r\n\r\nOur unique values-based culture (and extremely talented team) is our core competitive advantage, and each person on our team makes a direct, immediate impact on our business. \r\n\r\nWe value transparency, feedback, bias to action, growth, and an obligation to dissent. Every opinion is respected, we hold each other to extremely high standards, we’re driven by the diversity in our backgrounds, and unified by 100% alignment on our mission. \r\n\r\nWhat’s best for the customer is the heart of everything we do, and our customer stories prove it: by changing health insurance we’re literally saving lives. \r\n\r\nBased in San Francisco, SimplyInsured was founded in 2012 and is back by Bessemer Venture Partners, Polaris Ventures, and Y-Combinator. If you’re up for the challenge of improving health insurance for millions of Americans, we’re just getting started, and we’re growing!",
+    "one_liner": "We sell health insurance to small businesses 100% online.",
+    "team_size": 35,
+    "industry": "Healthcare",
+    "subindustry": "Healthcare -> Healthcare Services",
+    "launched_at": 1354492846,
+    "tags": [
+      "Health Insurance"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "Healthcare",
+      "Healthcare Services"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/simplyinsured",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/simplyinsured.json"
+  },
+  {
+    "id": 503,
+    "name": "Wefunder",
+    "slug": "wefunder",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/86fe89dc40132aeb8f280105ad161eb9c7281ebc.png",
+    "website": "http://wefunder.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "We help everyone invest in startups that they care about.\r\n\r\nWe believe that when all Americans can invest in innovation, the world will be a better place. And soon, our dream will become a reality. Thanks to the JOBS Act, everyone — not just the wealthy — can invest as little as $100 in the startups they care about. Not only does this open up the pool of investors, and increase the amount of great ideas that get funded, but it allows startups to grow an army of passionate investors who truly want to see them succeed. Second tier VC’s will become obsolete as startups tap their lead users and customers for quick early investments.",
+    "one_liner": "We're Robinhood for pre-IPO startups. Everyone can invest $100.",
+    "team_size": 35,
+    "industry": "Fintech",
+    "subindustry": "Fintech -> Asset Management",
+    "launched_at": 1354492868,
+    "tags": [
+      "Fintech",
+      "Investing"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "Fintech",
+      "Asset Management"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/wefunder",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/wefunder.json"
+  },
+  {
+    "id": 508,
+    "name": "Goldbelly",
+    "slug": "goldbelly",
+    "former_names": [
+      "Goldbely"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/cca9f25bb14498b6d14a86b02534da1a12502e50.png",
+    "website": "https://www.goldbelly.com/",
+    "all_locations": "New York City, NY, USA; New York, NY, USA",
+    "long_description": "Goldbelly is an online platform for specialty food makers and artisans. We discover America's most unique handmade foods and ship them to your door, anywhere nationwide.",
+    "one_liner": "Empowering restaurants and small food makers to ship nationwide.",
+    "team_size": 125,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Food and Beverage",
+    "launched_at": 1354492908,
+    "tags": [
+      "Marketplace",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2013",
+    "status": "Active",
+    "industries": [
+      "Consumer",
+      "Food and Beverage"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/goldbelly",
+    "api": "https://yc-oss.github.io/api/batches/winter-2013/goldbelly.json"
+  },
+  {
+    "id": 531,
+    "name": "DoorDash",
+    "slug": "doordash",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/d13287c52acc96909f32342e85c26a33cfdac310.png",
+    "website": "http://doordash.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Founded in 2013, DoorDash is a San Francisco-based technology company passionate about transforming local businesses and dedicated to enabling new ways of working, earning, and living. Today, DoorDash connects customers with their favorite local and national restaurants in more than 600 cities across the United States and Canada. By building intelligent, last-mile delivery technology for local cities, DoorDash aims to connect people with the things they care about — one dash at a time. \r\n\r\nRead more at blog.doordash.com, and find us on Glassdoor.",
+    "one_liner": "Restaurant delivery.",
+    "team_size": 8600,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Food and Beverage",
+    "launched_at": 1367523459,
+    "tags": [
+      "Marketplace",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2013",
+    "status": "Public",
+    "industries": [
+      "Consumer",
+      "Food and Beverage"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/doordash",
+    "api": "https://yc-oss.github.io/api/batches/summer-2013/doordash.json"
+  },
+  {
+    "id": 552,
+    "name": "Lob",
+    "slug": "lob",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/400c96e59ec9e937535827fdd7b324a248dec955.png",
+    "website": "http://lob.com",
+    "all_locations": "New York City, NY, USA; San Francisco, CA, USA",
+    "long_description": "Lob provides the building blocks for developers to automate the offline world. Enterprise companies use Lob’s suite of APIs to mail fully dynamic and personalized customer communications with print media. We provide insight into deliverability with piece-by-piece tracing and utilize our proprietary Print Delivery Network to streamline production across fully redundant nodes all over the country. \r\n\r\nFounded in 2013 and based in San Francisco, Lob is venture backed by Y Combinator, Polaris Partners, Floodgate, and First Round Capital.\r\n\r\nFind out more about Lob and what we’re up to by following our blog: https://lob.com/blog or visiting our website: https://lob.com.",
+    "one_liner": "Lob is the only automation platform that transforms direct mail into…",
+    "team_size": 150,
+    "industry": "B2B",
+    "subindustry": "B2B -> Marketing",
+    "launched_at": 1367523659,
+    "tags": [
+      "Automation"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Marketing"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/lob",
+    "api": "https://yc-oss.github.io/api/batches/summer-2013/lob.json"
+  },
+  {
+    "id": 566,
+    "name": "Webflow",
+    "slug": "webflow",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/c2275979b46d95062b78be0329b056f2290e3143.png",
+    "website": "https://webflow.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Webflow is the leading no-code visual web development platform. It seamlessly generates sophisticated code so anyone can build powerful web-based businesses and adapt to changes without developers or months of building. \r\n\r\nFrom entrepreneurs and creative agencies to Fortune 500 companies, Webflow makes the internet a more inclusive place by making the tools to build on it more accessible to more people, fueling business growth. Webflow powers websites for innovators like Discord, Monday.com, IDEO, Orange Theory Fitness, TED, and Dropbox. \r\n\r\nWebflow is backed by Y Combinator, Accel, CapitalG, Silversmith, and other awesome investors.",
+    "one_liner": "Professional website design and publishing platform. ",
+    "team_size": 600,
+    "industry": "B2B",
+    "subindustry": "B2B -> Marketing",
+    "launched_at": 1367523820,
+    "tags": [
+      "SaaS",
+      "Design",
+      "Marketing"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2013",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Marketing"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/webflow",
+    "api": "https://yc-oss.github.io/api/batches/summer-2013/webflow.json"
+  },
+  {
+    "id": 578,
+    "name": "AptDeco",
+    "slug": "aptdeco",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/411d3c1adaef3f9f8696301b60bbac584568d39c.png",
+    "website": "https://www.aptdeco.com/",
+    "all_locations": "New York City, NY, USA; New York, NY, USA",
+    "long_description": "AptDeco is a peer-to-peer managed marketplace dedicated for buying and selling quality used furniture. We offer a complete end-to-end process to bring back the joy of discovering amazing furniture finds for the home again. Our customers benefit from a trusted and verified community of buyers and sellers, pre-arranged pick up and delivery and a secure electronic payment process.",
+    "one_liner": "AptDeco is the easiest way to buy and sell used furniture",
+    "team_size": null,
+    "industry": "Consumer",
+    "subindustry": "Consumer -> Home and Personal",
+    "launched_at": 1384978610,
+    "tags": [
+      "Marketplace",
+      "Logistics",
+      "Furniture"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "Consumer",
+      "Home and Personal"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/aptdeco",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/aptdeco.json"
+  },
+  {
+    "id": 583,
+    "name": "Cambly",
+    "slug": "cambly",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/5c774e23b82a6ee8805cd340a8dd9d8e468279de.png",
+    "website": "http://www.cambly.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "The Cambly app gives English learners instant 1-on-1 access to friendly native speakers over video chat 24/7. Students get an affordable and convenient way to practice their English and gain confidence. Tutors get to make money helping people from around the world practice English.",
+    "one_liner": "On-demand access to English tutors over video chat.",
+    "team_size": 200,
+    "industry": "Education",
+    "subindustry": "Education",
+    "launched_at": 1384978655,
+    "tags": [
+      "Education"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "Education"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/cambly",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/cambly.json"
+  },
+  {
+    "id": 585,
+    "name": "Noora Health",
+    "slug": "noora-health",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/b4cd850f3939d61304f38ffc3355cec0cadbdab2.png",
+    "website": "http://noorahealth.org",
+    "all_locations": "Traverse City, MI, USA",
+    "long_description": "Noora Health trains patient families with high-impact health skills that improve outcomes and save lives. Our model provides basic yet vital care knowledge through trusted providers by creating a scalable program for caregiving education and training within\r\nthe established healthcare system. This model expands the care umbrella\r\nto include those closest to the patient — their family and community. Noora Health has trained over 30 million caregivers and patients across over 12,400 healthcare facilities in India, Bangladesh, Indonesia, and Nepal. The program reduces cardiac surgery complications by 71%, newborn readmissions by 56%, and neonatal mortality by 18%. By 2028, Noora Health will expand to reach over 70 million caregivers and\r\npatients. ",
+    "one_liner": "Training patients and their families with health skills",
+    "team_size": 500,
+    "industry": "Healthcare",
+    "subindustry": "Healthcare",
+    "launched_at": 1384978665,
+    "tags": [
+      "Consumer Health Services"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": true,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "Healthcare"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/noora-health",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/noora-health.json"
+  },
+  {
+    "id": 595,
+    "name": "Flexport",
+    "slug": "flexport",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/54997aad4067ac1994f422a49a5473fa603f5354.png",
+    "website": "https://www.flexport.com/careers/jobs/",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Founded in 2013, we believe trade can move the human race forward. That’s why our mission at Flexport is to make global trade easy for everyone.\r\n\r\nWhat the internet has done for bits and bytes, Flexport is doing for physical goods: giving every business the ability to connect to any customer, wherever they are in the world. That sounds pretty straightforward, but a fragmented and inefficient global supply chain has held the world back from untapped growth and innovation. By connecting everyone in the global economy we can unlock commerce, creativity, and human progress.\r\n\r\nTo do so, we’re building the platform for global logistics—empowering buyers, sellers and their logistics partners with the technology and services they need to grow and innovate. \r\nToday, we work with more than 40,000 customers and their suppliers across industries like manufacturing, retail, electronics, consumer goods, tech, apparel, and beauty. Companies of all sizes—from emerging brands to Fortune 500s—used Flexport technology to move nearly $19B of merchandise across 112 countries in 2021.\r\n\r\nInterested in joining our team? Check out our open job postings on careers site and apply directly today! https://www.flexport.com/careers/jobs/ ",
+    "one_liner": "Platform for global logistics.",
+    "team_size": 3000,
+    "industry": "B2B",
+    "subindustry": "B2B -> Supply Chain and Logistics",
+    "launched_at": 1384978752,
+    "tags": [
+      "SaaS",
+      "Logistics",
+      "Supply Chain"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Supply Chain and Logistics"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/flexport",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/flexport.json"
+  },
+  {
+    "id": 613,
+    "name": "PiinPoint",
+    "slug": "piinpoint",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/ab66514ee2aae2caa138e769ced840f8e4eba100.png",
+    "website": "https://piinpoint.com",
+    "all_locations": "Kitchener, ON, Canada",
+    "long_description": "PiinPoint is changing the way businesses identify the best location for expansion. Our modern day SAAS solution enables businesses to use powerful tools to search and validate locations throughout North America. We centralize a variety of datasets such as traffic, demographics, and available commercial real estate to ensure businesses can make a fast and reliable decision about where to expand.",
+    "one_liner": "PiinPoint helps businesses find the best locations for growth",
+    "team_size": 20,
+    "industry": "B2B",
+    "subindustry": "B2B -> Office Management",
+    "launched_at": 1384978933,
+    "tags": [
+      "SaaS",
+      "Real Estate",
+      "Analytics"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Office Management"
+    ],
+    "regions": [
+      "Canada",
+      "America / Canada"
+    ],
+    "stage": "Early",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/piinpoint",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/piinpoint.json"
+  },
+  {
+    "id": 636,
+    "name": "Algolia",
+    "slug": "algolia",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/3957efb32806e40351fb432ce3c38ae6d22865b3.png",
+    "website": "http://www.algolia.com",
+    "all_locations": "San Francisco, CA, USA; Paris, Île-de-France, France",
+    "long_description": "Our mission is to make every search interaction meaningful & rewarding, through developer-friendly and enterprise-grade APIs.\r\n\r\nAlgolia is the leading Search & Discovery API for websites and mobile apps. We help the most innovative companies across e-commerce, media and SaaS industries create powerful, relevant and scalable discovery experiences for their users. Unlike other solutions, our hosted platform reduces the complexities of building and scaling a fast, relevant digital experience and helps teams accelerate development time. More than 9,000 companies like Under Armour, Twitch, Periscope, Medium and Stripe rely on Algolia to manage 50+ billion search queries a month.\r\n\r\nFounded in 2012, we're backed by $184M in funding from Accel Partners, Alven Capital, Point Nine Capital and Storm Ventures. The team is headquartered in San Francisco with offices in Paris, London, New York, and Atlanta. To learn more, visit www.algolia.com.\r\n\r\n---\r\nWe’re looking for talented, passionate people to build the world’s best search technology. As an ownership-driven company, we seek team members who thrive under autonomy and diversity. \r\n\r\nWe're committed to building an inclusive and diverse workplace. We care about each other and the world around us, and embrace talented people regardless of their race, age, ancestry, religion, sex, gender identity, sexual orientation, marital status, color, veteran status, disability and socioeconomic background",
+    "one_liner": "A developer-friendly and enterprise-grade search API.",
+    "team_size": 810,
+    "industry": "B2B",
+    "subindustry": "B2B -> Engineering, Product and Design",
+    "launched_at": 1384980277,
+    "tags": [
+      "Developer Tools",
+      "SaaS",
+      "B2B"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Winter 2014",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Engineering, Product and Design"
+    ],
+    "regions": [
+      "United States of America",
+      "France",
+      "America / Canada",
+      "Europe",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/algolia",
+    "api": "https://yc-oss.github.io/api/batches/winter-2014/algolia.json"
+  },
+  {
+    "id": 662,
+    "name": "Checkr",
+    "slug": "checkr",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/211825b572def7bbe7c182d84f166129bc978b6b.png",
+    "website": "http://www.checkr.com",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "Checkr builds people infrastructure for the future of work. And we believe everyone should have a fair chance to work. That's why we've designed a faster—and fairer—way to screen job seekers. For more information on our mission and products, visit https://checkr.com.",
+    "one_liner": "People infrastructure for the future of work",
+    "team_size": 800,
+    "industry": "B2B",
+    "subindustry": "B2B -> Human Resources",
+    "launched_at": 1398907661,
+    "tags": [
+      "Artificial Intelligence",
+      "Compliance",
+      "HR Tech",
+      "API",
+      "Enterprise Software"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2014",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Human Resources"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": true,
+    "url": "https://www.ycombinator.com/companies/checkr",
+    "api": "https://yc-oss.github.io/api/batches/summer-2014/checkr.json"
+  },
+  {
+    "id": 695,
+    "name": "PicnicAI",
+    "slug": "picnicai",
+    "former_names": [
+      "PicnicHealth"
+    ],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/dbf45bc323953c8df6c8183d0e549e723e5e1a71.png",
+    "website": "https://picnic.ai",
+    "all_locations": "San Francisco, CA, USA",
+    "long_description": "PicnicAI deploys AI into the real-world complexity of care delivery and clinical research. PicnicHealth helps patients navigate fragmented care with AI-powered tools backed by a clinical team, giving them a unified view of their health across all their doctors. PicnicResearch makes clinical research faster, cheaper, and more reliable, using AI agents and direct patient relationships to change the economics of drug development so that more treatments reach the patients who need them.",
+    "one_liner": "Intelligence to accelerate human health.",
+    "team_size": 100,
+    "industry": "Healthcare",
+    "subindustry": "Healthcare",
+    "launched_at": 1398907926,
+    "tags": [
+      "Machine Learning",
+      "Health Tech",
+      "Digital Health",
+      "Healthcare",
+      "NLP"
+    ],
+    "tags_highlighted": [],
+    "top_company": false,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2014",
+    "status": "Active",
+    "industries": [
+      "Healthcare"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/picnicai",
+    "api": "https://yc-oss.github.io/api/batches/summer-2014/picnicai.json"
+  },
+  {
+    "id": 705,
+    "name": "ShipBob",
+    "slug": "shipbob",
+    "former_names": [],
+    "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/a7fe6af4f0d7680132345ae356f0c1abe1939e2a.png",
+    "website": "http://shipbob.com",
+    "all_locations": "Chicago, IL, USA",
+    "long_description": "ShipBob is a leading global fulfillment and supply chain platform designed for SMB and Mid-Market ecommerce brands. ShipBob provides brands a single view of their business and customers across sales channels to manage products, inventory, orders, and shipments, leveraging real-time analytics and reporting, dedicated support, and access to hundreds of technology and retail partners. ShipBob enables brands to improve the operations in their own facilities with ShipBob WMS (ShipBob's proprietary warehouse management system), and/or outsource fulfillment to have their orders picked, packed, and shipped from any of ShipBob’s 50+ fulfillment centers across the United States, Canada, Europe, and Australia. Founded in 2014, ShipBob launched through Y Combinator by co-founders Dhruv Saxena and Divey Gulati, two ecommerce entrepreneurs who saw a need for more efficient SMB supply chain services. Learn more by visiting shipbob.com. ",
+    "one_liner": "Providing Amazon level logistics to e-commerce businesses. ",
+    "team_size": 1,
+    "industry": "B2B",
+    "subindustry": "B2B -> Supply Chain and Logistics",
+    "launched_at": 1398907999,
+    "tags": [
+      "Logistics",
+      "E-commerce"
+    ],
+    "tags_highlighted": [],
+    "top_company": true,
+    "isHiring": true,
+    "nonprofit": false,
+    "batch": "Summer 2014",
+    "status": "Active",
+    "industries": [
+      "B2B",
+      "Supply Chain and Logistics"
+    ],
+    "regions": [
+      "United States of America",
+      "America / Canada",
+      "Remote",
+      "Partly Remote"
+    ],
+    "stage": "Growth",
+    "app_video_public": false,
+    "demo_day_video_public": false,
+    "app_answers": null,
+    "question_answers": false,
+    "url": "https://www.ycombinator.com/companies/shipbob",
+    "api": "https://yc-oss.github.io/api/batches/summer-2014/shipbob.json"
+  }
+]

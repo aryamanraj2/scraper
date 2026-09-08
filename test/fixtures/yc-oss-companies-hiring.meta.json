@@ -1,0 +1,8 @@
+{
+  "url": "https://yc-oss.github.io/api/companies/hiring.json",
+  "statusCode": 200,
+  "recordedAt": "2026-09-08T17:28:22.964Z",
+  "sliced": true,
+  "note": "Currently-hiring YC companies. Sliced to the first 40 records; each record is verbatim.",
+  "contentHash": "407a5a0fe022cb25892e06d41a40bd07c8777d8eaceef21018f11dab7b1807a2"
+}

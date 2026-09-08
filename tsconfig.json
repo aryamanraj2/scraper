@@ -22,8 +22,7 @@
 
     "baseUrl": ".",
     "paths": {
-      "@core/*": ["src/core/*"],
-      "robots-parser": ["./types/robots-parser.d.ts"]
+      "@core/*": ["src/core/*"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "tools/**/*.ts", "types/**/*.d.ts", "*.ts"],

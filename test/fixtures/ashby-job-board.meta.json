@@ -1,0 +1,8 @@
+{
+  "url": "https://api.ashbyhq.com/posting-api/job-board/ashby?includeCompensation=true",
+  "statusCode": 200,
+  "recordedAt": "2026-09-08T18:01:09.999Z",
+  "sliced": true,
+  "note": "Ashby public posting API (B6). Ashby's own board, trimmed to the first 20 jobs; each job is verbatim.",
+  "contentHash": "a67cda46f0c4aceefdd0771cca39cd6a3a8a4b0b3156d413dbbfdb26780396bd"
+}

@@ -27,6 +27,16 @@ export type RawResponse = {
   body: string
   headers: Record<string, string | string[] | undefined>
   url: string
+  /**
+   * True when the response exceeded `maxBytes` and `body` is a prefix.
+   *
+   * This flag is load-bearing. Without it a truncated body is indistinguishable
+   * from a complete one, so a 6 MB JSON feed silently arrives as 2 MB of valid
+   * bytes ending mid-string, and the only symptom is a parse error somewhere far
+   * from the cause. Callers must treat `truncated` as `source_unavailable`, never
+   * as data.
+   */
+  truncated: boolean
 }
 
 export type RawRequestOptions = {
@@ -54,18 +64,27 @@ export async function rawGet(url: string, opts: RawRequestOptions): Promise<RawR
 
   const limit = opts.maxBytes ?? DEFAULT_MAX_BYTES
   let size = 0
+  let truncated = false
   const chunks: Buffer[] = []
   for await (const chunk of res.body) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buf.byteLength
-    if (size > limit) break
+    if (size > limit) {
+      truncated = true
+      break
+    }
     chunks.push(buf)
   }
+  // Draining matters: abandoning the body mid-stream leaves the connection in a
+  // state undici cannot reuse, and at a 5s per-host spacing we hold connections
+  // for a long time.
+  if (truncated) res.body.destroy()
 
   return {
     statusCode: res.statusCode,
     body: Buffer.concat(chunks).toString('utf8'),
     headers: res.headers as Record<string, string | string[] | undefined>,
     url,
+    truncated,
   }
 }

@@ -23,15 +23,40 @@ export type Evidence = {
   confidence: number
 }
 
+/**
+ * What a seed source knows about a company, plus the provenance that makes it
+ * usable.
+ *
+ * `source` is not optional and is not decoration: `handover.md` §11 requires every
+ * stored field to be reconstructible from what the source actually said, so a seed
+ * that arrives without its record cannot be written to the database at all. F1
+ * writes one `Evidence` row per source key from `source.record`.
+ */
+export type SeedSourceRecord = {
+  /** The feed URL this record came from. */
+  url: string
+  /** The record exactly as the source published it. Never normalized in place. */
+  record: Record<string, unknown>
+  observedAt: Date
+  /** Stable hash of the whole record — see core/evidence/content-hash.ts. */
+  contentHash: string
+}
+
 export type CompanySeed = {
   externalId: string
   name: string
   website: string | null
   batch?: string | undefined
   locations?: string[] | undefined
+  countries?: string[] | undefined
   teamSize?: number | undefined
   tags?: string[] | undefined
   oneLiner?: string | undefined
+  longDescription?: string | undefined
+  isHiring?: boolean | undefined
+  /** The source's own lifecycle string, retained verbatim (handover.md §6). */
+  lifecycleStatus?: string | undefined
+  source: SeedSourceRecord
 }
 
 export type Posting = {
@@ -54,6 +79,15 @@ export interface AtsProvider {
    * detection rather than an afterthought (B6).
    */
   detect(careersUrl: string): Promise<{ boardToken: string } | null>
+  /**
+   * The feed URL for a board. Part of the contract rather than an implementation
+   * detail, because a board read produces an `Evidence` row about the board
+   * ITSELF — the open-posting count behind B2's hiring signal — and that row has
+   * to cite the feed it came from. Citing whichever posting happened to be first
+   * would make provenance depend on the order of somebody else's array, and would
+   * leave an empty board with nothing to cite at all.
+   */
+  boardUrl(boardToken: string): string
   listPostings(boardToken: string): Promise<Posting[]>
 }
 

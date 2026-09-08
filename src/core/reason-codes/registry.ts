@@ -139,7 +139,15 @@ export const REASON_CODE_REGISTRY: Record<ReasonCodeValue, ReasonCodeEntry> = {
 
   // --- research (F2) ------------------------------------------------------
   source_unavailable: { milestone: 'F1', description: 'The source returned an error or an unusable payload.' },
-  content_unchanged: { milestone: 'F2', description: 'Content hash matched the stored value; no reclassification needed.' },
+  content_unchanged: {
+    // Moved F2 -> F1. The F1 handover's ownership table put this in F2, but §8.2.4
+    // of the same document requires F1's posting ingest to "hit content_unchanged
+    // via contentHash rather than churn rows" — so it is reachable from F1's real
+    // path, and the registry records where a code IS raised, not where it was
+    // expected to be. See docs/F2-HANDOVER.md §6.
+    milestone: 'F1',
+    description: 'Content hash matched the stored value; no reclassification needed.',
+  },
   injection_detected: {
     milestone: 'F2',
     description: 'Fetched page text contained instruction-shaped content; recorded as data, never executed.',

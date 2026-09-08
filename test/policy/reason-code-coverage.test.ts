@@ -5,6 +5,11 @@ import { seedHostPolicies } from '../../src/core/policy/host-policy.js'
 import { checkKillSwitch, engageKillSwitch, releaseKillSwitch } from '../../src/core/killswitch/kill-switch.js'
 import { resolveSendingEnabled } from '../../src/core/config/config.js'
 import { reachableReasonCodes, type ReasonCodeValue } from '../../src/core/reason-codes/registry.js'
+import { runSeedIngest } from '../../src/ingest/yc/seed-loader.js'
+import { YC_OSS_FEEDS, YcOssSeedProvider } from '../../src/ingest/yc/yc-oss.js'
+import { GreenhouseProvider } from '../../src/ingest/ats/greenhouse.js'
+import { ingestPostings } from '../../src/ingest/ats/ingest-postings.js'
+import { StubFetcher, readFixture } from '../helpers/fixtures.js'
 import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
 import { mockAgent } from '../setup.js'
 
@@ -108,9 +113,75 @@ const scenarios: Record<string, () => Promise<ReasonCodeValue>> = {
     const d = await checkKillSwitch(testDb(), { account: 'me@owned.example' })
     return d.engaged ? d.reason : ('sending_disabled' as ReasonCodeValue)
   },
+
+  // --- F1 ingestion -------------------------------------------------------
+
+  /**
+   * Two yc-oss records resolving to one registrable domain. The unique index on
+   * `canonical_domain` would surface this as a constraint error; the loader turns
+   * it into the recorded decision the operator can actually read.
+   */
+  duplicate: async () => {
+    const base = (JSON.parse(readFixture('yc-oss-companies-hiring')) as Record<string, unknown>[])[0]!
+    const body = JSON.stringify([
+      { ...base, id: 901, name: 'Acme', website: 'https://acme.example' },
+      { ...base, id: 902, name: 'Acme again', website: 'http://www.acme.example/careers' },
+    ])
+    const fetcher = new StubFetcher({ [YC_OSS_FEEDS.hiring]: { body } })
+    const result = await runSeedIngest(testDb(), new YcOssSeedProvider(fetcher, { feed: 'hiring' }))
+    return result.skipped[0]?.reason ?? ('sending_disabled' as ReasonCodeValue)
+  },
+
+  /** A board that answered, with something that is not data. */
+  source_unavailable: async () => {
+    const company = await testDb().company.create({
+      data: {
+        canonicalDomain: 'unavailable.example',
+        displayName: 'Unavailable',
+        countries: [],
+        locations: [],
+        tags: [],
+      },
+    })
+    const url = 'https://boards-api.greenhouse.io/v1/boards/gone/jobs?content=true'
+    const fetcher = new StubFetcher({ [url]: { statusCode: 503, body: 'upstream error' } })
+    const result = await ingestPostings(testDb(), new GreenhouseProvider(fetcher), {
+      id: company.id,
+      atsBoardToken: 'gone',
+    })
+    return result.sourceFailure?.reason ?? ('sending_disabled' as ReasonCodeValue)
+  },
+
+  /**
+   * §8.2.4: re-ingesting an identical posting must hit this rather than churning
+   * rows. Owned by F1 rather than F2 — see the registry entry.
+   */
+  content_unchanged: async () => {
+    const company = await testDb().company.create({
+      data: {
+        canonicalDomain: 'unchanged.example',
+        displayName: 'Unchanged',
+        countries: [],
+        locations: [],
+        tags: [],
+      },
+    })
+    const token = 'razorpaysoftwareprivatelimited'
+    const url = `https://boards-api.greenhouse.io/v1/boards/${token}/jobs?content=true`
+    const body = readFixture('greenhouse-jobs')
+    const board = { id: company.id, atsBoardToken: token }
+
+    await ingestPostings(testDb(), new GreenhouseProvider(new StubFetcher({ [url]: { body } })), board)
+    await ingestPostings(testDb(), new GreenhouseProvider(new StubFetcher({ [url]: { body } })), board)
+
+    const audit = await testDb().auditLog.findFirst({
+      where: { action: 'ats.posting_unchanged' },
+    })
+    return (audit?.reasonCode as ReasonCodeValue | undefined) ?? ('sending_disabled' as ReasonCodeValue)
+  },
 }
 
-describe('every F0-owned reason code is reachable through its real code path', () => {
+describe('every F1-owned reason code is reachable through its real code path', () => {
   for (const [code, run] of Object.entries(scenarios)) {
     it(`raises ${code}`, async () => {
       expect(await run()).toBe(code)
@@ -118,7 +189,7 @@ describe('every F0-owned reason code is reachable through its real code path', (
   }
 
   it('covers exactly the codes this build stage claims to raise', () => {
-    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F0')].sort())
+    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F1')].sort())
   })
 })
 

@@ -1,0 +1,8 @@
+{
+  "url": "https://api.lever.co/v0/postings/leverdemo?mode=json",
+  "statusCode": 200,
+  "recordedAt": "2026-09-08T17:32:40.760Z",
+  "sliced": false,
+  "note": "Lever postings API (B6). Lever's own documented demo board — stable, and the shape their docs describe.",
+  "contentHash": "3d5e8e498cc1db74755163356d1cc1d53d6ed642e313c2c66f96b8924e1aad64"
+}

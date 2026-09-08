@@ -505,6 +505,18 @@ model Company {
   locations     String[]      @map("locations")
   teamSize      Int?          @map("team_size")
   tags          String[]      @map("tags")
+  /// Part F / handover.md §6 require the seed loader to retain `one_liner`,
+  /// `long_description` and hiring state. F0 built no column for them, so F1 added
+  /// these — see docs/F2-HANDOVER.md §4. They are seed-index values under H7: F2
+  /// classifies from them, but nothing citable is drawn from them without
+  /// re-verification against the company's own site.
+  ycOneLiner        String?   @map("yc_one_liner")
+  ycLongDescription String?   @map("yc_long_description") @db.Text
+  ycIsHiring        Boolean?  @map("yc_is_hiring")
+  /// yc-oss lifecycle string (Active, Inactive, Acquired, Public). handover.md §6
+  /// excludes dead/acquired companies "only after recording the decision", so the
+  /// raw value is retained rather than collapsed into a boolean.
+  ycStatus          String?   @map("yc_status")
   status        CompanyStatus @default(discovered) @map("status")
   statusReason  ReasonCode?   @map("status_reason")
   atsSlug       String?       @map("ats_slug")

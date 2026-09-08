@@ -23,6 +23,13 @@ export type GateContext = {
   companyId?: string | null
   /** Credits this request consumes against the research budget. */
   cost?: number
+  /**
+   * Response byte ceiling for this request. The default suits research pages;
+   * a structured feed raises it deliberately, at the call site, so nothing is
+   * ever truncated by accident. `RawResponse.truncated` reports the outcome —
+   * see raw-client.ts.
+   */
+  maxBytes?: number
 }
 
 export type FetchPolicyGateOptions = {
@@ -163,7 +170,10 @@ export class FetchPolicyGate {
 
     const host = normalizeHost(new URL(url).host)
     this.limiter.record(host)
-    const response = await rawGet(url, { userAgent: this.opts.userAgent })
+    const response = await rawGet(url, {
+      userAgent: this.opts.userAgent,
+      ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
+    })
     await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1)
 
     await writeAudit(this.db, {
@@ -172,7 +182,12 @@ export class FetchPolicyGate {
       action: 'fetch.performed',
       subjectType: 'Url',
       subjectId: url,
-      metadata: { host, statusCode: response.statusCode, bytes: response.body.length },
+      metadata: {
+        host,
+        statusCode: response.statusCode,
+        bytes: response.body.length,
+        truncated: response.truncated,
+      },
     })
     return { ok: true, response }
   }

@@ -4,8 +4,16 @@
  * `export default function`. TypeScript resolves that to the module namespace
  * rather than the callable, so the default import is not callable.
  *
- * This is the published surface, declared correctly, mapped in via tsconfig
- * `paths`. Runtime resolution is unaffected — it still loads the real package.
+ * This is the published surface, declared correctly, as an ambient module block.
+ * It is picked up because `types/**\/*.d.ts` is in tsconfig `include`, and an
+ * ambient `declare module` wins over the package's own typings.
+ *
+ * It must NOT be wired in through tsconfig `paths`. F0 did that, and `tsc` was
+ * happy — but `tsx` honours `paths` at RUNTIME too, so it resolved the import to
+ * this declaration file and every tool that touched robots.ts died with
+ * "The requested module 'robots-parser' does not provide an export named
+ * 'default'". The suite never caught it because vitest resolves differently.
+ * See docs/F2-HANDOVER.md §4.
  */
 declare module 'robots-parser' {
   export interface Robot {
