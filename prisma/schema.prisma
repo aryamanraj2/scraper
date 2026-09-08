@@ -1,0 +1,957 @@
+// Internship Outreach Intelligence — data model.
+//
+// Source of truth: the approved architecture plan, Part D (D1 lifecycles, D2 schema
+// deltas, D3 uniqueness rules). Where handover.md §4 and the plan disagree, the plan
+// wins; each such point is annotated with its defect id (A1..A12).
+//
+// Table and column names are snake_case via @map so that the hand-written SQL in
+// prisma/migrations/*_partial_unique_indexes/ matches D3 verbatim.
+//
+// NOTE: `prisma db push` must never be run against this schema. The two partial
+// unique indexes in D3 cannot be expressed here and live in a hand-written SQL
+// migration; db push reports them as drift and offers to drop them. Use db:migrate.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums — lifecycles (D1)
+// ---------------------------------------------------------------------------
+
+/// Company lifecycle. `insufficient_evidence` is a budget decision, re-entrant,
+/// not a verdict.
+enum CompanyStatus {
+  discovered
+  normalized
+  researching
+  researched
+  insufficient_evidence
+  excluded
+
+  @@map("company_status")
+}
+
+/// A4: Lead.status stops at qualification. Composition/approval belongs to Draft,
+/// transmission to SendAttempt.
+enum LeadStatus {
+  candidate
+  qualifying
+  qualified
+  rejected
+
+  @@map("lead_status")
+}
+
+/// A3: selects the precondition set. A speculative lead has no Opportunity by
+/// definition, so Opportunity is optional on Lead.
+enum LeadKind {
+  posted_role
+  speculative
+
+  @@map("lead_kind")
+}
+
+enum RoleTrackKey {
+  ios_android
+  ai_engineer
+  sde
+  swe
+
+  @@map("role_track_key")
+}
+
+enum OpportunityKind {
+  published_role
+  speculative
+
+  @@map("opportunity_kind")
+}
+
+enum OpportunityStatus {
+  open
+  stale
+  closed
+  unknown
+
+  @@map("opportunity_status")
+}
+
+enum DraftStatus {
+  composing
+  quality_gate
+  gate_failed
+  awaiting_approval
+  approved
+  scheduled
+  sending
+  sent
+  replied
+  bounced_hard
+  bounced_soft
+  opted_out
+  closed
+
+  @@map("draft_status")
+}
+
+/// A9: SendAttempt owns transmission. `in_flight` is written BEFORE the provider
+/// call; a retry that finds one reconciles via rfc822msgid: search, never re-sends.
+enum SendAttemptStatus {
+  in_flight
+  sent
+  failed
+  aborted
+
+  @@map("send_attempt_status")
+}
+
+enum ApplicationPacketStatus {
+  prepared
+  submitted
+  acknowledged
+  interview
+  rejected
+  no_response
+
+  @@map("application_packet_status")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — policy
+// ---------------------------------------------------------------------------
+
+/// Part C: cold outreach is permitted in exactly three cases. Values map to the
+/// plan's 1/2/3 by ordinal; see src/core/policy/outreach-case.ts for the mapping.
+enum OutreachCase {
+  /// Case 1 — strong speculative-growth lead with no relevant posting.
+  speculative_no_posting
+  /// Case 2 — company where the public application route is unclear.
+  application_route_unclear
+  /// Case 3 — targeted follow-up AFTER applying, public recruiting contact exists.
+  post_application_followup
+
+  @@map("outreach_case")
+}
+
+enum ContactType {
+  careers_alias
+  talent_alias
+  university_recruiting
+  named_talent
+
+  @@map("contact_type")
+}
+
+enum ContactStatus {
+  active
+  suppressed
+  retired
+
+  @@map("contact_status")
+}
+
+/// A10: suppression survives PII deletion, so scope is stored, never a Contact FK.
+enum SuppressionScope {
+  contact
+  domain
+  global
+
+  @@map("suppression_scope")
+}
+
+/// A12: a soft bounce must not permanently suppress.
+enum BounceHardness {
+  hard
+  soft
+
+  @@map("bounce_hardness")
+}
+
+/// D5 Evidence.sourceType.
+enum EvidenceSourceType {
+  yc
+  ats
+  aggregator
+  registry
+  company_page
+  hiring_board
+  social_api
+  browser_task
+  user_hint
+
+  @@map("evidence_source_type")
+}
+
+/// handover.md §4 CompanySignal types, plus the ATS job-count delta that replaces
+/// the excluded X API signal (B2).
+enum CompanySignalType {
+  yc_profile
+  job_posting
+  careers_page
+  remote_policy
+  funding_or_growth
+  engineering_blog
+  ats_job_count_delta
+
+  @@map("company_signal_type")
+}
+
+/// D4 preflight step 1. Deny is permanent and beats every other entry.
+enum HostPolicyMode {
+  allow
+  deny
+
+  @@map("host_policy_mode")
+}
+
+enum HostPolicyOrigin {
+  seed_static
+  derived_company
+  operator
+
+  @@map("host_policy_origin")
+}
+
+/// A12: kill-switch scope must be enumerated, and it cancels rather than pauses.
+enum KillSwitchScope {
+  global
+  domain
+  account
+
+  @@map("kill_switch_scope")
+}
+
+enum AuditActorType {
+  system
+  user
+  worker
+
+  @@map("audit_actor_type")
+}
+
+// ---------------------------------------------------------------------------
+// The closed reason-code enum.
+//
+// Every failure path in the system resolves to one of these. Free text is not
+// permitted anywhere a reason is recorded. src/core/reason-codes/registry.ts maps
+// each code to the milestone that owns it, and a test asserts the registry and this
+// enum are in exact bijection — so adding a code here without registering it fails
+// the suite, and vice versa.
+// ---------------------------------------------------------------------------
+
+enum ReasonCode {
+  // --- D4 fetch preflight ---
+  host_denied
+  robots_disallowed
+  terms_prohibited
+  rate_limited
+  budget_exhausted
+
+  // --- D6 send gate ---
+  approval_hash_mismatch
+  suppressed
+  profile_incomplete
+  stale_at_send
+  outreach_not_permitted
+  cap_exceeded
+  breaker_open
+  duplicate_contact
+  duplicate_company
+  sending_disabled
+
+  // --- qualification / rejection (handover.md §5) ---
+  no_public_recruiting_route
+  executive_only_contact
+  outdated_role
+  weak_evidence
+  low_relevance
+  duplicate
+  legal_policy_mismatch
+  insufficient_evidence
+
+  // --- outcomes ---
+  hard_bounce
+  soft_bounce
+  opt_out
+  wrong_contact
+  replied
+  application_submitted
+  user_paused
+
+  // --- research ---
+  source_unavailable
+  content_unchanged
+  injection_detected
+
+  // --- kill switch ---
+  kill_switch_global
+  kill_switch_domain
+  kill_switch_account
+
+  // --- browser layer (F7 seam; deferred per D4) ---
+  browser_needs_user
+  browser_blocked
+  browser_policy_rejected
+
+  @@map("reason_code")
+}
+
+// ---------------------------------------------------------------------------
+// Provenance primitives
+// ---------------------------------------------------------------------------
+
+/// D5. Every fact in the system points at one of these. `excerpt` is verbatim and
+/// never paraphrased; the 500-char ceiling is enforced by the column type.
+model Evidence {
+  id          String             @id @default(uuid(7))
+  companyId   String?            @map("company_id")
+  sourceUrl   String             @map("source_url")
+  sourceType  EvidenceSourceType @map("source_type")
+  excerpt     String             @map("excerpt") @db.VarChar(500)
+  contentHash String             @map("content_hash")
+  observedAt  DateTime           @map("observed_at")
+  confidence  Float              @map("confidence")
+  /// Which precedence tier produced this (D4 ordering), for auditing that a
+  /// cheaper sufficient source was not skipped.
+  fetchedVia  String             @map("fetched_via")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  company       Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companySignal CompanySignal[]
+
+  @@index([companyId])
+  @@index([contentHash])
+  @@index([sourceType, observedAt])
+  @@map("evidence")
+}
+
+/// Append-only. A row per transition: actor, action, subject, reason code, cost,
+/// timestamp. This is what makes handover.md §11's reconstruction criterion true
+/// rather than aspirational. The repository layer exposes no update or delete.
+model AuditLog {
+  id          String         @id @default(uuid(7))
+  actorType   AuditActorType @map("actor_type")
+  actorId     String         @map("actor_id")
+  action      String         @map("action")
+  subjectType String         @map("subject_type")
+  subjectId   String?        @map("subject_id")
+  reasonCode  ReasonCode?    @map("reason_code")
+  costUsd     Decimal?       @map("cost_usd") @db.Decimal(12, 6)
+  /// Redacted before write. Never contains credentials — see src/core/logging/redact.ts.
+  metadata    Json?          @map("metadata")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([subjectType, subjectId])
+  @@index([reasonCode, createdAt])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+/// A10. Stores a salted HMAC of the normalized email, never plaintext, and is
+/// retained after the Contact row is erased. Deleting a person who asked to be
+/// erased must not destroy the evidence that prevents re-contacting them.
+model Suppression {
+  id         String           @id @default(uuid(7))
+  emailHmac  String           @map("email_hmac")
+  scope      SuppressionScope @map("scope")
+  /// Set for scope=domain. Null for contact (identified solely by the HMAC) and
+  /// for global.
+  domain     String?          @map("domain")
+  reasonCode ReasonCode       @map("reason_code")
+  note       String?          @map("note")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  @@unique([emailHmac, scope])
+  @@index([scope])
+  @@map("suppression")
+}
+
+// ---------------------------------------------------------------------------
+// Fetch policy (D4)
+// ---------------------------------------------------------------------------
+
+/// D4 preflight steps 1 and 3. A `deny` entry is permanent and takes precedence
+/// over every `allow`. An unknown host is refused (`host_denied`) unless a
+/// `derived_company` allow entry exists for it.
+model HostPolicy {
+  id               String           @id @default(uuid(7))
+  /// Registrable host, lowercased, no scheme or port.
+  host             String           @unique @map("host")
+  mode             HostPolicyMode   @map("mode")
+  origin           HostPolicyOrigin @map("origin")
+  /// Also matches every subdomain of `host`.
+  includeSubdomains Boolean         @default(true) @map("include_subdomains")
+  /// D4 step 3: robots.txt permission does not override stated terms.
+  termsProhibited  Boolean          @default(false) @map("terms_prohibited")
+  /// D4 step 4: a published rate limit or crawl-delay always wins over our default.
+  rateDelayMsOverride Int?          @map("rate_delay_ms_override")
+  sourceUrl        String?          @map("source_url")
+  note             String?          @map("note")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@index([mode])
+  @@map("host_policy")
+}
+
+/// D4 step 2. A missing or unparseable robots file is treated as restrictive, not
+/// permissive, for hosts without an explicit allow entry — `parseOk = false` is a
+/// refusal, not a pass.
+model RobotsCache {
+  id        String   @id @default(uuid(7))
+  host      String   @unique @map("host")
+  body      String   @map("body")
+  parseOk   Boolean  @map("parse_ok")
+  /// Seconds. Compared against fetchedAt at read time.
+  ttlSeconds Int     @map("ttl_seconds")
+  fetchedAt DateTime @map("fetched_at")
+  statusCode Int?    @map("status_code")
+
+  @@map("robots_cache")
+}
+
+/// A12 / D4 step 5. Makes runaway spend visible and bounded rather than discovered
+/// on an invoice. Free infrastructure and billed LLM usage are counted separately
+/// so the one real cost line stays legible.
+model ResearchBudget {
+  id             String   @id @default(uuid(7))
+  /// Null companyId = the global monthly envelope.
+  companyId      String?  @map("company_id")
+  periodMonth    String   @map("period_month")
+  creditsSpent   Int      @default(0) @map("credits_spent")
+  creditsCap     Int      @map("credits_cap")
+  billedUsdSpent Decimal  @default(0) @map("billed_usd_spent") @db.Decimal(12, 6)
+  billedUsdCap   Decimal  @map("billed_usd_cap") @db.Decimal(12, 6)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, periodMonth])
+  @@map("research_budget")
+}
+
+// ---------------------------------------------------------------------------
+// Secrets (A5) and operational control
+// ---------------------------------------------------------------------------
+
+/// A5, restated: no plaintext credential in the database, and no credential may
+/// ever enter an LLM prompt or a log line. There is deliberately no plaintext
+/// column on this model, so there is nothing to write one to.
+///
+/// Envelope encryption: the value is sealed with a per-record data key (AES-256-GCM);
+/// the data key is itself sealed with a key-encryption key held in the macOS Keychain
+/// (a secret manager in deployment). Only ciphertext, IVs, tags and a key version
+/// reach Postgres.
+model SecretRecord {
+  id            String   @id @default(uuid(7))
+  name          String   @unique @map("name")
+  alg           String   @map("alg")
+  keyVersion    Int      @map("key_version")
+  ciphertext    Bytes    @map("ciphertext")
+  iv            Bytes    @map("iv")
+  authTag       Bytes    @map("auth_tag")
+  dekCiphertext Bytes    @map("dek_ciphertext")
+  dekIv         Bytes    @map("dek_iv")
+  dekAuthTag    Bytes    @map("dek_auth_tag")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("secret_record")
+}
+
+/// A12: kill-switch scope is enumerated, and engaging it must cancel scheduled
+/// jobs rather than pause them (proven at F5).
+model KillSwitch {
+  id         String          @id @default(uuid(7))
+  scope      KillSwitchScope @map("scope")
+  /// Domain for scope=domain, sender identity for scope=account, "*" for global.
+  target     String          @map("target")
+  engaged    Boolean         @default(false) @map("engaged")
+  reasonCode ReasonCode?     @map("reason_code")
+  note       String?         @map("note")
+  actorId    String          @map("actor_id")
+  engagedAt  DateTime?       @map("engaged_at")
+  releasedAt DateTime?       @map("released_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@unique([scope, target])
+  @@map("kill_switch")
+}
+
+// ---------------------------------------------------------------------------
+// Company graph
+// ---------------------------------------------------------------------------
+
+model Company {
+  id            String        @id @default(uuid(7))
+  /// Canonicalized registrable domain. The join key across every source.
+  canonicalDomain String      @unique @map("canonical_domain")
+  displayName   String        @map("display_name")
+  legalName     String?       @map("legal_name")
+  website       String?       @map("website")
+  /// H7: yc-oss has no LICENSE file, so it is a seed index only. Every citable
+  /// fact must be re-verified from the company's own site before use.
+  ycId          String?       @unique @map("yc_id")
+  ycBatch       String?       @map("yc_batch")
+  countries     String[]      @map("countries")
+  locations     String[]      @map("locations")
+  teamSize      Int?          @map("team_size")
+  tags          String[]      @map("tags")
+  status        CompanyStatus @default(discovered) @map("status")
+  statusReason  ReasonCode?   @map("status_reason")
+  atsSlug       String?       @map("ats_slug")
+  atsBoardToken String?       @map("ats_board_token")
+  careersUrl    String?       @map("careers_url")
+  lastRefreshedAt DateTime?   @map("last_refreshed_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  evidence           Evidence[]
+  signals            CompanySignal[]
+  opportunities      Opportunity[]
+  contacts           Contact[]
+  leads              Lead[]
+  researchBriefs     ResearchBrief[]
+  applicationPackets ApplicationPacket[]
+  sendAttempts       SendAttempt[]
+  researchBudgets    ResearchBudget[]
+
+  @@index([status])
+  @@index([ycBatch])
+  @@map("company")
+}
+
+/// handover.md §4 keeps this table name. Provenance now lives on the referenced
+/// Evidence row rather than being duplicated here.
+model CompanySignal {
+  id         String            @id @default(uuid(7))
+  companyId  String            @map("company_id")
+  evidenceId String            @map("evidence_id")
+  signalType CompanySignalType @map("signal_type")
+  observedAt DateTime          @map("observed_at")
+  confidence Float             @map("confidence")
+  /// For ats_job_count_delta: the week-over-week change (B2's substitute signal).
+  numericValue Float?          @map("numeric_value")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, signalType, observedAt])
+  @@map("company_signal")
+}
+
+/// Controlled vocabulary for the four tracks. Seeded, not user-editable at runtime.
+model RoleTrack {
+  id                String       @id @default(uuid(7))
+  key               RoleTrackKey @unique @map("key")
+  displayName       String       @map("display_name")
+  positiveKeywords  String[]     @map("positive_keywords")
+  negativeKeywords  String[]     @map("negative_keywords")
+  defaultResumeVersionId String? @map("default_resume_version_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  defaultResumeVersion ResumeVersion? @relation(fields: [defaultResumeVersionId], references: [id], onDelete: SetNull)
+  opportunities        Opportunity[]
+
+  @@map("role_track")
+}
+
+model Opportunity {
+  id           String            @id @default(uuid(7))
+  companyId    String            @map("company_id")
+  roleTrackId  String?           @map("role_track_id")
+  kind         OpportunityKind   @map("kind")
+  status       OpportunityStatus @default(unknown) @map("status")
+  title        String?           @map("title")
+  /// The official application URL. H8: the system prepares applications, never
+  /// submits them.
+  roleUrl      String?           @map("role_url")
+  location     String?           @map("location")
+  remoteEvidenceId String?       @map("remote_evidence_id")
+  /// A8: re-checked between approval and send. A draft approved Friday must not
+  /// send Monday citing a closed req.
+  postedAt     DateTime?         @map("posted_at")
+  lastSeenAt   DateTime          @map("last_seen_at")
+  closedAt     DateTime?         @map("closed_at")
+  externalId   String?           @map("external_id")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleTrack          RoleTrack?          @relation(fields: [roleTrackId], references: [id], onDelete: SetNull)
+  leads              Lead[]
+  applicationPackets ApplicationPacket[]
+
+  @@unique([companyId, externalId])
+  @@index([status, lastSeenAt])
+  @@map("opportunity")
+}
+
+/// H2: role aliases are the default target; published University Recruiting named
+/// contacts are the second tier. handover.md §1.2 forbids inferred addresses, and
+/// there is no CEO fallback anywhere in this model.
+model Contact {
+  id             String        @id @default(uuid(7))
+  companyId      String        @map("company_id")
+  emailNormalized String       @map("email_normalized")
+  contactType    ContactType   @map("contact_type")
+  status         ContactStatus @default(active) @map("status")
+  publicTitle    String?       @map("public_title")
+  /// Mandatory: the public page this address was published on, with the excerpt
+  /// and capture timestamp on the Evidence row.
+  evidenceId     String        @map("evidence_id")
+  capturedAt     DateTime      @map("captured_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+  sendAttempts SendAttempt[]
+
+  @@unique([emailNormalized])
+  @@index([companyId, status])
+  @@map("contact")
+}
+
+// ---------------------------------------------------------------------------
+// Candidate assets
+// ---------------------------------------------------------------------------
+
+model CandidateProfile {
+  id             String   @id @default(uuid(7))
+  fullName       String   @map("full_name")
+  location       String?  @map("location")
+  availabilityFrom DateTime? @map("availability_from")
+  availabilityTo DateTime?  @map("availability_to")
+  workAuthorization String? @map("work_authorization")
+  links          Json?    @map("links")
+  signature      String?  @map("signature")
+  senderIdentity String?  @map("sender_identity")
+  replyToEmail   String?  @map("reply_to_email")
+  /// D6 condition 3 checks completeness against an enumerated field list, not a
+  /// vibe. The list lives in src/core/config/profile-fields.ts (F4).
+  isComplete     Boolean  @default(false) @map("is_complete")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("candidate_profile")
+}
+
+model ResumeVersion {
+  id          String   @id @default(uuid(7))
+  label       String   @map("label")
+  trackKey    RoleTrackKey @map("track_key")
+  /// H3: link on first contact, attach after reply. New domain + attachment is the
+  /// worst deliverability combination.
+  linkUrl     String   @map("link_url")
+  filePath    String?  @map("file_path")
+  fileSha256  String?  @map("file_sha256")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  roleTracks         RoleTrack[]
+  drafts             Draft[]
+  applicationPackets ApplicationPacket[]
+
+  @@map("resume_version")
+}
+
+/// The only factual statements the drafting system may make about the candidate.
+model ApprovedClaim {
+  id        String   @id @default(uuid(7))
+  text      String   @map("text")
+  category  String   @map("category")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("approved_claim")
+}
+
+model ResearchBrief {
+  id            String   @id @default(uuid(7))
+  companyId     String   @map("company_id")
+  /// 2-4 evidence-backed facts. Citations are mandatory: the drafting schema
+  /// requires an evidenceId per personalization sentence, so an unsupported claim
+  /// is a schema error, not a review finding.
+  facts         Json     @map("facts")
+  relevanceNote String   @map("relevance_note")
+  citedEvidenceIds String[] @map("cited_evidence_ids")
+  promptVersion String?  @map("prompt_version")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  drafts  Draft[]
+
+  @@index([companyId])
+  @@map("research_brief")
+}
+
+// ---------------------------------------------------------------------------
+// Scoring (A1, A11)
+// ---------------------------------------------------------------------------
+
+/// A1: component maxima summing to exactly 100; penalties are a separate
+/// risk_deduction. A11: weights are frozen during the pilot and every set is
+/// versioned, so a threshold change is replayable against historical leads.
+model ScoreVersion {
+  id            String   @id @default(uuid(7))
+  label         String   @unique @map("label")
+  /// Component maxima. Validated to sum to exactly 100 at write time.
+  weights       Json     @map("weights")
+  /// Queue / research / reject thresholds.
+  thresholds    Json     @map("thresholds")
+  maxRiskDeduction Int   @map("max_risk_deduction")
+  isActive      Boolean  @default(false) @map("is_active")
+  frozenUntilSends Int   @default(100) @map("frozen_until_sends")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  leads Lead[]
+
+  @@map("score_version")
+}
+
+// ---------------------------------------------------------------------------
+// Lead / Draft / SendAttempt — the three lifecycles (A3, A4, D1)
+// ---------------------------------------------------------------------------
+
+model Lead {
+  id               String       @id @default(uuid(7))
+  companyId        String       @map("company_id")
+  /// A3: optional. A speculative lead has no Opportunity by definition, and the
+  /// old state machine could not represent it.
+  opportunityId    String?      @map("opportunity_id")
+  contactId        String?      @map("contact_id")
+  leadKind         LeadKind     @map("lead_kind")
+  status           LeadStatus   @default(candidate) @map("status")
+  statusReason     ReasonCode?  @map("status_reason")
+  primaryTrack     RoleTrackKey @map("primary_track")
+  /// A12: the primary-track tie-break must be recorded, not implicit.
+  primaryTrackReason String     @map("primary_track_reason")
+  campaignCycle    String       @map("campaign_cycle")
+  score            Int?         @map("score")
+  riskDeduction    Int?         @map("risk_deduction")
+  /// A1: stored so every score is explainable from its components without a refetch.
+  scoreComponents  Json?        @map("score_components")
+  scoreVersionId   String?      @map("score_version_id")
+  citedEvidenceIds String[]     @map("cited_evidence_ids")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunity  Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  scoreVersion ScoreVersion? @relation(fields: [scoreVersionId], references: [id], onDelete: SetNull)
+  drafts       Draft[]
+
+  @@index([status, leadKind])
+  @@index([companyId, campaignCycle])
+  @@map("lead")
+}
+
+/// A4: Draft owns composition and approval. A7: approval_hash is frozen at human
+/// approval and compared byte-for-byte before transmission; a mismatch returns the
+/// draft to awaiting_approval and never auto-resolves.
+model Draft {
+  id              String       @id @default(uuid(7))
+  leadId          String       @map("lead_id")
+  researchBriefId String?      @map("research_brief_id")
+  resumeVersionId String?      @map("resume_version_id")
+  status          DraftStatus  @default(composing) @map("status")
+  statusReason    ReasonCode?  @map("status_reason")
+  subject         String?      @map("subject")
+  bodyText        String?      @map("body_text")
+  /// Part C: any path to a draft outside these three cases is a policy violation.
+  outreachCase    OutreachCase? @map("outreach_case")
+  citedEvidenceIds String[]    @map("cited_evidence_ids")
+  promptVersion   String?      @map("prompt_version")
+  /// A7: sha256 over canonical_json({subject, body_text, recipient_email_normalized,
+  /// resume_version_id, attachment_sha256[], cited_evidence_ids[], sender_identity,
+  /// prompt_version}).
+  approvalHash    String?      @map("approval_hash")
+  approvedBy      String?      @map("approved_by")
+  approvedAt      DateTime?    @map("approved_at")
+  gateResult      Json?        @map("gate_result")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  lead          Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  researchBrief ResearchBrief? @relation(fields: [researchBriefId], references: [id], onDelete: SetNull)
+  resumeVersion ResumeVersion? @relation(fields: [resumeVersionId], references: [id], onDelete: SetNull)
+  sendAttempts  SendAttempt[]
+
+  @@index([status])
+  @@map("draft")
+}
+
+/// A9. Written with status=in_flight BEFORE the provider call, so an ambiguous
+/// failure is recoverable.
+///
+/// Gmail has no native idempotency-key parameter, so the key is carried in the
+/// message itself: `rfc822MessageId` is derived deterministically from
+/// `idempotencyKey` on the owned sending domain and set explicitly in the raw MIME.
+/// On any ambiguous timeout or retry, the Sent mailbox is searched for
+/// `rfc822msgid:<that id>` BEFORE any further send. A hit means the send succeeded
+/// and the response was lost — reconcile providerMessageId and mark sent. A miss
+/// means it did not land, and only then may the send proceed. This column is
+/// persisted at write time so it survives a crash between derivation and
+/// transmission; it must not be replaced by a generic idempotency parameter.
+model SendAttempt {
+  id                String            @id @default(uuid(7))
+  draftId           String            @map("draft_id")
+  contactId         String            @map("contact_id")
+  companyId         String            @map("company_id")
+  campaignCycle     String            @map("campaign_cycle")
+  /// 1 = first touch. D3's partial unique indexes key off this.
+  touchNumber       Int               @map("touch_number")
+  idempotencyKey    String            @unique @map("idempotency_key")
+  rfc822MessageId   String            @unique @map("rfc822_message_id")
+  status            SendAttemptStatus @default(in_flight) @map("status")
+  statusReason      ReasonCode?       @map("status_reason")
+  providerMessageId String?           @map("provider_message_id")
+  providerThreadId  String?           @map("provider_thread_id")
+  attemptedAt       DateTime          @default(now()) @map("attempted_at")
+  reconciledAt      DateTime?         @map("reconciled_at")
+
+  draft   Draft   @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  deliveryEvents DeliveryEvent[]
+  replies        Reply[]
+  bounces        Bounce[]
+  optOuts        OptOut[]
+
+  // D3's two partial unique indexes are NOT declared here — Prisma cannot express
+  // a WHERE clause on an index. They live in a hand-written SQL migration. These
+  // plain indexes only support the lookups.
+  @@index([contactId, campaignCycle, touchNumber])
+  @@index([companyId, campaignCycle, touchNumber])
+  @@index([status])
+  @@map("send_attempt")
+}
+
+// ---------------------------------------------------------------------------
+// Outcomes
+// ---------------------------------------------------------------------------
+
+model DeliveryEvent {
+  id            String   @id @default(uuid(7))
+  sendAttemptId String   @map("send_attempt_id")
+  eventType     String   @map("event_type")
+  providerCode  String?  @map("provider_code")
+  occurredAt    DateTime @map("occurred_at")
+  raw           Json?    @map("raw")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sendAttempt SendAttempt @relation(fields: [sendAttemptId], references: [id], onDelete: Cascade)
+
+  @@index([sendAttemptId, occurredAt])
+  @@map("delivery_event")
+}
+
+model Reply {
+  id            String   @id @default(uuid(7))
+  sendAttemptId String   @map("send_attempt_id")
+  providerMessageId String @unique @map("provider_message_id")
+  classification String? @map("classification")
+  snippet       String?  @db.VarChar(500) @map("snippet")
+  receivedAt    DateTime @map("received_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sendAttempt SendAttempt @relation(fields: [sendAttemptId], references: [id], onDelete: Cascade)
+
+  @@map("reply")
+}
+
+/// A12: hardness is explicit. A soft bounce must not permanently suppress.
+model Bounce {
+  id            String         @id @default(uuid(7))
+  sendAttemptId String         @map("send_attempt_id")
+  hardness      BounceHardness @map("hardness")
+  providerCode  String?        @map("provider_code")
+  diagnostic    String?        @map("diagnostic")
+  occurredAt    DateTime       @map("occurred_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  sendAttempt SendAttempt @relation(fields: [sendAttemptId], references: [id], onDelete: Cascade)
+
+  @@index([hardness, occurredAt])
+  @@map("bounce")
+}
+
+model OptOut {
+  id            String   @id @default(uuid(7))
+  sendAttemptId String?  @map("send_attempt_id")
+  emailHmac     String   @map("email_hmac")
+  occurredAt    DateTime @map("occurred_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sendAttempt SendAttempt? @relation(fields: [sendAttemptId], references: [id], onDelete: SetNull)
+
+  @@index([emailHmac])
+  @@map("opt_out")
+}
+
+// ---------------------------------------------------------------------------
+// Application funnel (Part C) — the terminal action
+// ---------------------------------------------------------------------------
+
+/// Part C / H8: the system prepares applications; it never submits them.
+/// Greenhouse exposes an authenticated application-submission endpoint. We do not
+/// use it — auto-applying is the volume-over-quality failure this design exists to
+/// reject, and it would breach ATS terms.
+model ApplicationPacket {
+  id              String                  @id @default(uuid(7))
+  companyId       String                  @map("company_id")
+  opportunityId   String?                 @map("opportunity_id")
+  resumeVersionId String                  @map("resume_version_id")
+  /// The official ATS URL the user submits through, by hand.
+  officialUrl     String                  @map("official_url")
+  /// Drawn only from ApprovedClaim records.
+  prefilledAnswers Json                   @map("prefilled_answers")
+  citedEvidenceIds String[]               @map("cited_evidence_ids")
+  status          ApplicationPacketStatus @default(prepared) @map("status")
+  submittedAt     DateTime?               @map("submitted_at")
+  outcomeNote     String?                 @map("outcome_note")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  resumeVersion ResumeVersion @relation(fields: [resumeVersionId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@map("application_packet")
+}
+
+// ---------------------------------------------------------------------------
+// Manual discovery handoff (handover.md §15)
+// ---------------------------------------------------------------------------
+
+/// D4 precedence step 5. URL/note only, never fetched from a gated host: a
+/// linkedin.com URL submitted here must never trigger a request to linkedin.com.
+/// The FetchPolicyGate denylist enforces that at the transport layer.
+model LeadHint {
+  id          String      @id @default(uuid(7))
+  rawUrl      String?     @map("raw_url")
+  companyName String?     @map("company_name")
+  note        String?     @map("note")
+  resolvedCompanyId String? @map("resolved_company_id")
+  rejectedReason ReasonCode? @map("rejected_reason")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  resolvedAt  DateTime?   @map("resolved_at")
+
+  @@map("lead_hint")
+}

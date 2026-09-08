@@ -1,0 +1,102 @@
+# ---------------------------------------------------------------------------
+# Secrets and local configuration
+#
+# .env holds DATABASE_URL and SUPPRESSION_HMAC_SALT. The salt is effectively
+# write-once: rotating it orphans every existing Suppression row, which is how a
+# person who asked never to be contacted again gets contacted again (A10). It must
+# never reach a remote.
+#
+# The key-encryption key is NOT in any file — it lives in the macOS Keychain, and
+# only ciphertext reaches Postgres (A5).
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*-credentials.json
+client_secret*.json
+token.json
+.secrets/
+
+# ---------------------------------------------------------------------------
+# Dependencies and build output
+#
+# generated/ is the Prisma client, produced by `npm run db:generate`. It is
+# regenerated from schema.prisma on every clone, so committing it only creates
+# merge conflicts.
+# ---------------------------------------------------------------------------
+node_modules/
+generated/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Next.js arrives at F3
+.next/
+.vercel/
+
+# ---------------------------------------------------------------------------
+# Test, coverage and tooling caches
+# ---------------------------------------------------------------------------
+coverage/
+.nyc_output/
+*.lcov
+.vitest/
+.vite/
+.eslintcache
+.cache/
+.turbo/
+
+# ---------------------------------------------------------------------------
+# Logs and runtime scratch
+# ---------------------------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pids/
+*.pid
+*.seed
+tmp/
+temp/
+scratch/
+
+# Local Postgres dumps and fixtures captured from live sources
+*.dump
+*.sql.gz
+prisma/*.db
+prisma/*.db-journal
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+.idea/
+*.swp
+*.swo
+*~
+
+# VS Code: keep shared project settings, drop personal ones
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# ---------------------------------------------------------------------------
+# Agent / assistant local state
+# ---------------------------------------------------------------------------
+.claude/
+.aider*
