@@ -20,11 +20,22 @@
     "seed:hosts": "tsx tools/seed-host-policies.ts",
     "fixtures:record": "tsx tools/record-fixtures.ts",
     "verify:f1": "tsx tools/verify-f1.ts",
-    "ingest:seed": "tsx tools/run-seed-ingest.ts"
+    "ingest:seed": "tsx tools/run-seed-ingest.ts",
+    "llm:list": "tsx tools/llm.ts list",
+    "llm:next": "tsx tools/llm.ts next",
+    "llm:fulfil": "tsx tools/llm.ts fulfil",
+    "llm:reject": "tsx tools/llm.ts reject",
+    "llm:kinds": "tsx tools/llm.ts kinds",
+    "seed:tracks": "tsx tools/seed-role-tracks.ts",
+    "intel:run": "tsx tools/run-intelligence.ts",
+    "verify:f2": "tsx tools/verify-f2.ts",
+    "seed:budget": "tsx tools/seed-global-budget.ts"
   },
   "dependencies": {
+    "@mozilla/readability": "0.6.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
+    "linkedom": "0.18.13",
     "pg": "8.23.0",
     "pg-boss": "12.30.0",
     "robots-parser": "3.0.1",

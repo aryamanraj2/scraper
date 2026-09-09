@@ -41,13 +41,35 @@ describe('reason-code registry', () => {
     expect(Object.keys(ReasonCode).sort()).toEqual([...ALL_REASON_CODES].sort())
   })
 
-  it('marks the F1-owned codes as reachable and defers the rest', () => {
-    const reachable = reachableReasonCodes('F1')
-    // F0's preflight refusals, stage guard and three kill-switch scopes, plus the
-    // three F1 ingestion adds: a record that resolves to an already-ingested
-    // company or posting, a source that returned nothing usable, and a posting
-    // whose contentHash matched (moved F2 -> F1; see the registry entry).
+  it('marks the F2-owned codes as reachable and defers the rest', () => {
+    const reachable = reachableReasonCodes('F2')
+    // Everything F0 and F1 could raise, plus F2's five: a posting past its
+    // freshness window, evidence too thin to support a personalized claim, a score
+    // below the reject threshold, a company with nothing scoreable at all, and a
+    // fetched page shaped like instructions to an agent.
     expect(reachable.sort()).toEqual(
+      [
+        'budget_exhausted',
+        'content_unchanged',
+        'duplicate',
+        'host_denied',
+        'injection_detected',
+        'insufficient_evidence',
+        'kill_switch_account',
+        'kill_switch_domain',
+        'kill_switch_global',
+        'low_relevance',
+        'outdated_role',
+        'rate_limited',
+        'robots_disallowed',
+        'sending_disabled',
+        'source_unavailable',
+        'terms_prohibited',
+        'weak_evidence',
+      ].sort(),
+    )
+    // F1's own set stays exactly what it was.
+    expect(reachableReasonCodes('F1').sort()).toEqual(
       [
         'budget_exhausted',
         'content_unchanged',

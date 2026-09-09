@@ -53,6 +53,7 @@ export const SEED_ALLOW_HOSTS: SeedHostEntry[] = [
   { host: 'api.ashbyhq.com', includeSubdomains: false, note: 'Ashby public posting API: GET /posting-api/job-board/{name}, no auth, single call (B6).' },
   { host: 'yc-oss.github.io', includeSubdomains: false, note: 'yc-oss daily company index. H7: seed index only — re-verify every citable fact from the company site.' },
   { host: 'raw.githubusercontent.com', includeSubdomains: false, note: 'yc-oss raw JSON payloads.' },
+  { host: 'api.firecrawl.dev', includeSubdomains: false, note: 'D4 tier 3 escalation: POST /v2/scrape, Bearer auth (B6a). Reached only through FetchPolicyGate.postJson, and only when FIRECRAWL_API_KEY is set.' },
 ]
 
 /** Lowercased host with any port and trailing dot removed. */

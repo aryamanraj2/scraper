@@ -16,7 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { prisma, disconnectPrisma } from '../src/core/db/client.js'
-import { MILESTONE_STAGE } from '../src/core/config/stage.js'
+import { MILESTONE_STAGE, isAtOrAfter } from '../src/core/config/stage.js'
 import { reachableReasonCodes } from '../src/core/reason-codes/registry.js'
 
 type Check = { name: string; ok: boolean; detail: string }
@@ -36,12 +36,23 @@ const db = prisma()
 // 1. 100-200 normalized companies.
 {
   const total = await db.company.count()
-  const normalized = await db.company.count({ where: { status: 'normalized' } })
+  // "Normalized" is a milestone a company has PASSED, not a state it sits in.
+  // D1's lifecycle runs discovered -> normalized -> researching -> {researched |
+  // insufficient_evidence | excluded}, so F2's scorer legitimately moves every
+  // company out of `normalized` — and a verifier that counted only that status
+  // reported 0/150 the moment F2 ran. A shipped milestone's verifier has to stay
+  // green at later stages or it stops being a regression test.
+  const NORMALIZED_OR_LATER = ['normalized', 'researching', 'researched', 'insufficient_evidence', 'excluded'] as const
+  const normalized = await db.company.count({ where: { status: { in: [...NORMALIZED_OR_LATER] } } })
   const withDomain = await db.company.count({ where: { canonicalDomain: { not: '' } } })
+  const byStatus = await db.company.groupBy({ by: ['status'], _count: { _all: true } })
   checks.push({
     name: '100-200 normalized companies',
     ok: normalized >= 100 && normalized <= 200 && withDomain === total,
-    detail: `${normalized} normalized of ${total} total; all have a canonical domain: ${withDomain === total}`,
+    detail:
+      `${normalized} normalized or later of ${total} total ` +
+      `(${byStatus.map((s) => `${s.status}=${s._count._all}`).join(', ')}); ` +
+      `all have a canonical domain: ${withDomain === total}`,
   })
 }
 
@@ -121,7 +132,11 @@ const db = prisma()
   const missing = required.filter((code) => !reachable.includes(code as never))
   checks.push({
     name: 'Milestone bumped honestly',
-    ok: MILESTONE_STAGE === 'F1' && missing.length === 0,
+    // `isAtOrAfter`, not equality: F2 raises MILESTONE_STAGE to 'F2', and the F2
+    // exit criteria also require verify:f1 to stay green. An equality check made
+    // those two requirements contradictory — a shipped milestone's verifier has to
+    // keep passing at every later stage, or it stops being a regression test.
+    ok: isAtOrAfter(MILESTONE_STAGE, 'F1') && missing.length === 0,
     detail: `MILESTONE_STAGE=${MILESTONE_STAGE}; ${reachable.length} codes reachable${missing.length ? `; MISSING ${missing.join(', ')}` : ''}`,
   })
 }

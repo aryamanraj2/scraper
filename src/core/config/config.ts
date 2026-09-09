@@ -18,6 +18,13 @@ const EnvSchema = z.object({
 
   SENDING_ENABLED: boolish.default(false),
 
+  /**
+   * D4 tier 3. Absent means escalation is disabled: B6a's credits were unclaimed
+   * at F2, and H9's rule for optional capability applies — the pipeline must be
+   * correct with it missing, never broken by its absence.
+   */
+  FIRECRAWL_API_KEY: z.string().optional(),
+
   USER_AGENT: z.string().min(1),
   ROBOTS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
   DEFAULT_HOST_RATE_DELAY_MS: z.coerce.number().int().nonnegative().default(5_000),

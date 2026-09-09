@@ -46,6 +46,11 @@ export type RawRequestOptions = {
   headers?: Record<string, string>
 }
 
+export type RawPostOptions = RawRequestOptions & {
+  /** Serialized as JSON. The only body shape this client will send. */
+  json: unknown
+}
+
 const DEFAULT_TIMEOUT_MS = 15_000
 /** Research pages are text. Anything larger is not something we want to parse. */
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024
@@ -61,8 +66,45 @@ export async function rawGet(url: string, opts: RawRequestOptions): Promise<RawR
     // would escape the host the preflight just approved. A 3xx comes back to the
     // caller as a 3xx, and the gate re-runs its checks on the target.
   })
+  return await collect(res, url, opts.maxBytes)
+}
 
-  const limit = opts.maxBytes ?? DEFAULT_MAX_BYTES
+/**
+ * A JSON POST, for a vendor API that has no GET form.
+ *
+ * Added in F2 for Firecrawl, whose v2 scrape endpoint is
+ * `POST https://api.firecrawl.dev/v2/scrape` (verified against the vendor's API
+ * reference at implementation time). Every F0/F1 source was a plain GET, so this
+ * path did not exist.
+ *
+ * It is deliberately narrow. There is no general request builder here: one method,
+ * a JSON body, and the same size ceiling and timeouts as `rawGet`. A POST reaches
+ * the network exactly as a GET does — through `FetchPolicyGate`, after the same
+ * five-step preflight — because the thing the preflight protects is the HOST, and
+ * a host does not become fetchable by changing the verb. Redirects are not followed
+ * for a POST at all: a 3xx is returned to the caller, which treats it as unusable
+ * rather than replaying a request body against a host the preflight has not seen.
+ */
+export async function rawPostJson(url: string, opts: RawPostOptions): Promise<RawResponse> {
+  const res = await request(url, {
+    method: 'POST',
+    headers: {
+      'user-agent': opts.userAgent,
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...opts.headers,
+    },
+    body: JSON.stringify(opts.json),
+    headersTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    bodyTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  })
+  return await collect(res, url, opts.maxBytes)
+}
+
+type UndiciResponse = Awaited<ReturnType<typeof request>>
+
+async function collect(res: UndiciResponse, url: string, maxBytes?: number): Promise<RawResponse> {
+  const limit = maxBytes ?? DEFAULT_MAX_BYTES
   let size = 0
   let truncated = false
   const chunks: Buffer[] = []

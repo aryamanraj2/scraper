@@ -967,3 +967,56 @@ model LeadHint {
 
   @@map("lead_hint")
 }
+
+// ---------------------------------------------------------------------------
+// LLM handoff (F0 deviation §4.9; docs/handoff-llm-gateway.md)
+// ---------------------------------------------------------------------------
+
+enum LlmTaskStatus {
+  pending
+  claimed
+  fulfilled
+  rejected
+  abandoned
+
+  @@map("llm_task_status")
+}
+
+/// One unit of judgment the pipeline needs but cannot compute deterministically.
+///
+/// The app writes the row and moves on; a Claude Code session drains pending rows
+/// and writes results back through a schema-validating CLI. The session never
+/// fetches anything: `input` carries Evidence excerpts that FetchPolicyGate already
+/// captured, so provenance stays verbatim and scraped page text arrives as DATA in
+/// a payload rather than as instructions to something holding Bash and DB access
+/// (Part G, prompt-injection row).
+model LlmTask {
+  id            String        @id @default(uuid(7))
+  kind          String        @map("kind")
+  promptVersion String        @map("prompt_version")
+  /// JSON Schema derived from the caller's Zod schema. The CLI validates the
+  /// response against exactly this before accepting it.
+  responseSchema Json         @map("response_schema")
+  /// Task payload. Evidence excerpts are quoted here, never fetched at fulfil time.
+  input         Json          @map("input")
+  /// Evidence rows the response is allowed to cite. A citation outside this set is
+  /// a validation failure, not a review finding.
+  allowedEvidenceIds String[] @map("allowed_evidence_ids")
+  subjectType   String        @map("subject_type")
+  subjectId     String        @map("subject_id")
+  status        LlmTaskStatus @default(pending) @map("status")
+  statusReason  ReasonCode?   @map("status_reason")
+  output        Json?         @map("output")
+  /// Who fulfilled it, and with what. 'claude-code-session' for the handoff path,
+  /// a model id for the API path. Recorded so a brief's origin is auditable.
+  fulfilledBy   String?       @map("fulfilled_by")
+  costUsd       Decimal?      @map("cost_usd") @db.Decimal(12, 6)
+  attempts      Int           @default(0) @map("attempts")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  claimedAt     DateTime?     @map("claimed_at")
+  fulfilledAt   DateTime?     @map("fulfilled_at")
+
+  @@index([status, kind])
+  @@index([subjectType, subjectId])
+  @@map("llm_task")
+}

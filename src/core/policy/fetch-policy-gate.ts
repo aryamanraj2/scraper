@@ -6,7 +6,7 @@ import { resolveHostPolicy } from './host-policy.js'
 import { checkRobots } from './robots.js'
 import { checkBudget, recordSpend } from './budget.js'
 import { HostRateLimiter, effectiveDelayMs } from './rate-limit.js'
-import { rawGet, type RawResponse } from './http/raw-client.js'
+import { rawGet, rawPostJson, type RawResponse } from './http/raw-client.js'
 
 export type PreflightAllow = { allowed: true; rateDelayMs: number }
 export type PreflightRefusal = {
@@ -187,6 +187,65 @@ export class FetchPolicyGate {
         statusCode: response.statusCode,
         bytes: response.body.length,
         truncated: response.truncated,
+      },
+    })
+    return { ok: true, response }
+  }
+
+  /**
+   * The same preflight, for a vendor API that only speaks POST (F2: Firecrawl's
+   * v2 scrape endpoint).
+   *
+   * Nothing about the policy changes. Host allow/deny, terms, robots, rate policy
+   * and both budget envelopes are evaluated exactly as they are for a GET, because
+   * what they protect is the host and the spend — neither of which cares about the
+   * verb. The only difference is downstream: no redirect is followed for a POST
+   * (see raw-client.ts), and the body is JSON.
+   *
+   * `redactedBodyKeys` names fields whose values must not reach the audit row. The
+   * gate writes an audit entry for every request, and a vendor payload can carry a
+   * key; redaction runs at the sink, but naming the keys here keeps a secret out of
+   * the metadata object in the first place.
+   */
+  async postJson(
+    url: string,
+    body: unknown,
+    ctx: GateContext & { headers?: Record<string, string>; redactedBodyKeys?: string[] } = {},
+  ): Promise<{ ok: true; response: RawResponse } | { ok: false; reason: PreflightRefusal['reason'] }> {
+    const pre = await this.check(url, ctx)
+    if (!pre.allowed) return { ok: false, reason: pre.reason }
+
+    const host = normalizeHost(new URL(url).host)
+    this.limiter.record(host)
+    const response = await rawPostJson(url, {
+      userAgent: this.opts.userAgent,
+      json: body,
+      ...(ctx.headers === undefined ? {} : { headers: ctx.headers }),
+      ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
+    })
+    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1)
+
+    const redacted = new Set(ctx.redactedBodyKeys ?? [])
+    const safeBody =
+      body !== null && typeof body === 'object'
+        ? Object.fromEntries(
+            Object.entries(body as Record<string, unknown>).filter(([k]) => !redacted.has(k)),
+          )
+        : undefined
+
+    await writeAudit(this.db, {
+      actorType: 'system',
+      actorId: 'fetch-policy-gate',
+      action: 'fetch.performed',
+      subjectType: 'Url',
+      subjectId: url,
+      metadata: {
+        host,
+        method: 'POST',
+        statusCode: response.statusCode,
+        bytes: response.body.length,
+        truncated: response.truncated,
+        ...(safeBody === undefined ? {} : { body: safeBody }),
       },
     })
     return { ok: true, response }

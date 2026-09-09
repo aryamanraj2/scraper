@@ -6,7 +6,7 @@ const TABLES = [
   'send_attempt', 'draft', 'lead', 'application_packet', 'research_brief',
   'contact', 'opportunity', 'company_signal', 'evidence', 'company',
   'role_track', 'resume_version', 'approved_claim', 'candidate_profile',
-  'score_version', 'lead_hint',
+  'score_version', 'lead_hint', 'llm_task',
 ]
 
 let client: PrismaClient | undefined

@@ -12,8 +12,9 @@ on your behalf.
 | `handover.md` | The original brief. §1's non-negotiable policies are binding. |
 | `docs/architecture-plan.md` | The approved architecture plan, verbatim. The implementation contract. |
 | `docs/F1-HANDOVER.md` | What F0 built, every deviation from the plan and why, and the F1 task. |
-| `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. **Point a new session at this.** |
-| `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built at F2. |
+| `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. |
+| `docs/F3-HANDOVER.md` | What F2 built, every deviation, and the F3 task. **Point a new session at this.** |
+| `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built in F2. |
 
 Two documents govern this repo:
 
@@ -25,12 +26,25 @@ Two documents govern this repo:
   Defect ids (A1–A12) and verification ids (B1–B7) referenced in code comments
   point at it.
 
-## Status: F1 complete
+## Status: F2 complete
 
-F0 made the safeguards structural. F1 adds ingestion: a yc-oss seed loader, domain
+F0 made the safeguards structural. F1 added ingestion: a yc-oss seed loader, domain
 canonicalization, ATS detection with Lever slug resolution, and the three required
-adapters — Greenhouse, Lever and Ashby. Still no scoring, no drafting, no sending,
-and no optional adapter.
+adapters — Greenhouse, Lever and Ashby. F2 adds intelligence: the four-track role
+taxonomy and a deterministic matcher, a scorer rebuilt to exactly 100 against a
+versioned weight set, `SignalGraphService` enforcing D4's source precedence as a hard
+floor, static fetch + Readability through the preflight, Firecrawl escalation behind
+a flag, ATS job-count deltas, and the `HandoffLlmGateway`. Still no contacts, no
+drafting, no sending, and no optional adapter.
+
+| F2 exit criterion | Where it is proven |
+|---|---|
+| Every score explainable from stored components | `npm run verify:f2`; `test/unit/scoring.test.ts` |
+| Score sums to exactly 100 per `ScoreVersion` | `test/unit/scoring.test.ts` |
+| Research budget observably caps spend | `test/policy/page-research.test.ts` |
+| Preflight refusals recorded, not retried around | `test/policy/signal-graph-precedence.test.ts` |
+| Source precedence is a hard floor | `test/policy/signal-graph-precedence.test.ts` |
+| All five F2 reason codes reachable | `test/policy/reason-code-coverage.test.ts` |
 
 | F1 exit criterion | Where it is proven |
 |---|---|
@@ -48,7 +62,7 @@ and no optional adapter.
 | Secrets round-trip without touching logs | `test/integration/secret-store.test.ts` |
 | No HTTP client reachable outside the gate | `test/policy/no-raw-http.test.ts`, `test/policy/fetch-policy-gate.test.ts` |
 
-Run `npm run verify:f0` and `npm run verify:f1` for the criteria in one report each.
+Run `npm run verify:f0`, `npm run verify:f1` and `npm run verify:f2` for the criteria in one report each.
 
 ## Setup
 
@@ -77,6 +91,13 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm test` | AST guard, then the whole suite offline against fixtures |
 | `npm run verify:f0` | The four F0 exit criteria, individually reported |
 | `npm run verify:f1` | The seven F1 exit criteria, individually reported |
+| `npm run verify:f2` | The seven F2 exit criteria, individually reported |
+| `npm run intel:run` | Score the corpus from stored rows. No network unless `--research N` |
+| `npm run intel:run -- --research 40` | **Live.** Walk the signal graph and research up to N companies |
+| `npm run intel:run -- --briefs` | Queue a research brief per qualified lead |
+| `npm run llm:list` / `llm:next` / `llm:fulfil` / `llm:reject` | Drain the judgment backlog from a Claude Code session |
+| `npm run seed:tracks` | Seed the four `RoleTrack` rows from the taxonomy |
+| `npm run seed:budget` | Open the global monthly research envelope (default 1,000 credits) |
 | `npm run ingest:seed` | **Live.** yc-oss seed, ATS detection, postings. `-- --limit 150` |
 | `npm run ingest:seed -- --postings-only` | **Live.** Refresh known boards only; skips the slow detection pass |
 | `npm run fixtures:record` | **Live.** Re-capture one real response per source into `test/fixtures/` |
@@ -84,7 +105,7 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm run db:migrate` | Apply migrations (dev) |
 | `npm run check:no-raw-http` | Fail if anything outside the gate can reach the network |
 
-## Three things that will bite you if you don't know them
+## Four things that will bite you if you don't know them
 
 **Never run `prisma db push`.** The two partial unique indexes from D3 cannot be
 expressed in `schema.prisma` and live in a hand-written SQL migration. `db push`
@@ -102,10 +123,11 @@ nothing: `src/core/config/stage.ts` carries a `MILESTONE_STAGE` constant that on
 a reviewed commit changes, and sending stays refused with `sending_disabled` until
 it reaches `F5`.
 
-**Only two commands touch a live source**, and neither runs in `npm test`:
-`ingest:seed` and `fixtures:record`. Both go through `FetchPolicyGate`, so a
-fixture can never describe a capability the pipeline does not have. Everything else
-replays `test/fixtures/` through undici's `MockAgent` with net connect disabled.
+**Only three commands touch a live source**, and none runs in `npm test`:
+`ingest:seed`, `fixtures:record`, and `intel:run -- --research N`. All three go
+through `FetchPolicyGate`, so a fixture can never describe a capability the pipeline
+does not have. Everything else replays `test/fixtures/` through undici's `MockAgent`
+with net connect disabled.
 
 ## Layout
 
@@ -124,6 +146,12 @@ src/ingest/yc/                yc-oss SeedProvider and the seed loader
 src/ingest/ats/               detection signatures + Greenhouse/Lever/Ashby adapters
 src/ingest/host/              the derived_company host allow rows F1 owes the gate
 src/ingest/budget/            per-company research envelopes (H5)
+src/core/llm/                 LlmTask registry + the handoff gateway and its validation
+src/intel/taxonomy/           the four role tracks and the deterministic matcher
+src/intel/scoring/            ScoreVersion, the pure scorer, the collector, persistence
+src/intel/research/           fetch + Readability, injection scanning, Firecrawl escalation
+src/intel/signals/            ATS job-count deltas (B2)
+src/intel/signal-graph.ts     D4 source precedence as a hard floor
 test/fixtures/                real responses, captured through the gate
 tools/                        AST guard, verifiers, seeders, fixture recorder
 ```
