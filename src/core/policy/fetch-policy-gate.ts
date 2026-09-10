@@ -24,6 +24,13 @@ export type GateContext = {
   /** Credits this request consumes against the research budget. */
   cost?: number
   /**
+   * The part of `cost` that consumes a PAID vendor allowance — Firecrawl credits,
+   * today. Defaults to 0, which is correct for every free tier-2 fetch. Counted
+   * alongside `cost` rather than instead of it: one ceiling, two counters, so
+   * "cap zero -> all research no-ops" still covers the free half (F2 §4.7).
+   */
+  vendorCost?: number
+  /**
    * Response byte ceiling for this request. The default suits research pages;
    * a structured feed raises it deliberately, at the call site, so nothing is
    * ever truncated by accident. `RawResponse.truncated` reports the outcome —
@@ -174,7 +181,7 @@ export class FetchPolicyGate {
       userAgent: this.opts.userAgent,
       ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
     })
-    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1)
+    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1, 0, this.opts.now?.() ?? new Date(), ctx.vendorCost ?? 0)
 
     await writeAudit(this.db, {
       actorType: 'system',
@@ -223,7 +230,7 @@ export class FetchPolicyGate {
       ...(ctx.headers === undefined ? {} : { headers: ctx.headers }),
       ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
     })
-    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1)
+    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1, 0, this.opts.now?.() ?? new Date(), ctx.vendorCost ?? 0)
 
     const redacted = new Set(ctx.redactedBodyKeys ?? [])
     const safeBody =

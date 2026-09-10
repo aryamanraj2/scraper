@@ -6,6 +6,7 @@ import type { LlmGateway } from '../interfaces/providers.js'
 import type { ReasonCodeValue } from '../reason-codes/registry.js'
 import { redact } from '../logging/redact.js'
 import {
+  collectCitedApprovedClaimIds,
   collectCitedEvidenceIds,
   findTaskSchema,
   findTaskSchemaByPromptVersion,
@@ -82,6 +83,12 @@ export type EnqueueSpec = {
   input: Record<string, unknown>
   /** The only evidence ids a response may cite. */
   allowedEvidenceIds: string[]
+  /**
+   * The only `ApprovedClaim` ids a response may cite (F3). Optional because most
+   * kinds make no candidate claims; an omitted or empty set means "cite none", never
+   * "cite anything", which is what makes the check safe to add to existing kinds.
+   */
+  allowedApprovedClaimIds?: string[]
   subjectType: string
   subjectId: string
 }
@@ -127,6 +134,7 @@ export class HandoffLlmGateway implements LlmGateway {
         responseSchema: jsonSchemaFor(entry.schema) as Prisma.InputJsonValue,
         input: spec.input as Prisma.InputJsonValue,
         allowedEvidenceIds: spec.allowedEvidenceIds,
+        allowedApprovedClaimIds: spec.allowedApprovedClaimIds ?? [],
         subjectType: spec.subjectType,
         subjectId: spec.subjectId,
       },
@@ -139,7 +147,13 @@ export class HandoffLlmGateway implements LlmGateway {
       action: 'llm.task_queued',
       subjectType: spec.subjectType,
       subjectId: spec.subjectId,
-      metadata: { taskId: task.id, kind: spec.kind, promptVersion: spec.promptVersion, allowed: spec.allowedEvidenceIds.length },
+      metadata: {
+        taskId: task.id,
+        kind: spec.kind,
+        promptVersion: spec.promptVersion,
+        allowed: spec.allowedEvidenceIds.length,
+        allowedClaims: (spec.allowedApprovedClaimIds ?? []).length,
+      },
     })
     return { taskId: task.id, created: true }
   }
@@ -163,6 +177,7 @@ export class HandoffLlmGateway implements LlmGateway {
       promptVersion: s.promptVersion,
       input: (s.input ?? {}) as Record<string, unknown>,
       allowedEvidenceIds: [],
+      allowedApprovedClaimIds: [],
       subjectType: 'Unspecified',
       subjectId: 'unspecified',
     })
@@ -176,7 +191,14 @@ export class HandoffLlmGateway implements LlmGateway {
 
 export type FulfilFailure = {
   ok: false
-  problem: 'unknown_task' | 'wrong_status' | 'no_schema' | 'schema_mismatch' | 'uncited_evidence' | 'redaction'
+  problem:
+    | 'unknown_task'
+    | 'wrong_status'
+    | 'no_schema'
+    | 'schema_mismatch'
+    | 'uncited_evidence'
+    | 'uncited_claim'
+    | 'redaction'
   detail: string
 }
 
@@ -195,7 +217,10 @@ export type FulfilResult = { ok: true; taskId: string } | FulfilFailure
  *  3. **Every cited `evidenceId` is in `allowedEvidenceIds`.** This is the mechanism
  *     behind `handover.md` §11's golden test: an unsupported claim becomes a schema
  *     error rather than something a human is expected to catch.
- *  4. No field carries text matching the redaction patterns.
+ *  4. **Every cited `approvedClaimId` is in `allowedApprovedClaimIds`** (F3). The same
+ *     rule, pointed at the candidate rather than the employer — an application answer
+ *     asserts things about both, and only one of them was covered before.
+ *  5. No field carries text matching the redaction patterns.
  */
 export async function fulfilTask(
   db: Db,
@@ -236,6 +261,18 @@ export async function fulfilTask(
     }
   }
 
+  const allowedClaims = new Set(task.allowedApprovedClaimIds)
+  const citedClaims = collectCitedApprovedClaimIds(parsed.data)
+  const uncitedClaims = [...citedClaims].filter((id) => !allowedClaims.has(id))
+  if (uncitedClaims.length > 0) {
+    await db.llmTask.update({ where: { id: taskId }, data: { attempts: { increment: 1 } } })
+    return {
+      ok: false,
+      problem: 'uncited_claim',
+      detail: `cited approved claims outside allowedApprovedClaimIds: ${uncitedClaims.join(', ')}`,
+    }
+  }
+
   // The output is about to become quotable by F3 and F4. A credential that reached
   // it — pasted from a page, echoed from a header — must not be stored, and
   // redacting it silently would hide that it happened.
@@ -268,7 +305,13 @@ export async function fulfilTask(
     subjectType: task.subjectType,
     subjectId: task.subjectId,
     costUsd: 0,
-    metadata: { taskId, kind: task.kind, promptVersion: task.promptVersion, cited: [...cited] },
+    metadata: {
+      taskId,
+      kind: task.kind,
+      promptVersion: task.promptVersion,
+      cited: [...cited],
+      citedClaims: [...citedClaims],
+    },
   })
 
   return { ok: true, taskId }

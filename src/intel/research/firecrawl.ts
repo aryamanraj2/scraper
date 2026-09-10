@@ -134,6 +134,10 @@ export class FirecrawlResearchProvider {
       {
         companyId: company.id,
         cost: FIRECRAWL_PLAIN_SCRAPE_CREDITS,
+        // This is the tier that costs money. `cost` bounds the whole research path
+        // so a zero cap still no-ops it; `vendorCost` is what tells the operator how
+        // much of the Firecrawl allowance is actually gone (F2 §4.7, fixed in F3).
+        vendorCost: FIRECRAWL_PLAIN_SCRAPE_CREDITS,
         headers: { authorization: `Bearer ${this.opts.apiKey ?? ''}` },
         ...(this.opts.maxBytes === undefined ? {} : { maxBytes: this.opts.maxBytes }),
       },

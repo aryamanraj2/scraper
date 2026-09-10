@@ -41,13 +41,36 @@ describe('reason-code registry', () => {
     expect(Object.keys(ReasonCode).sort()).toEqual([...ALL_REASON_CODES].sort())
   })
 
-  it('marks the F2-owned codes as reachable and defers the rest', () => {
-    const reachable = reachableReasonCodes('F2')
-    // Everything F0 and F1 could raise, plus F2's five: a posting past its
-    // freshness window, evidence too thin to support a personalized claim, a score
-    // below the reject threshold, a company with nothing scoreable at all, and a
-    // fetched page shaped like instructions to an agent.
+  it('marks the F3-owned codes as reachable and defers the rest', () => {
+    const reachable = reachableReasonCodes('F3')
+    // Everything F0, F1 and F2 could raise, plus F3's one: the code recorded when the
+    // operator marks a packet submitted. It is the code that STOPS OUTREACH for an
+    // opportunity — Part C case 3 permits a follow-up only after an application
+    // exists, and F4's outreach predicate reads this state.
     expect(reachable.sort()).toEqual(
+      [
+        'application_submitted',
+        'budget_exhausted',
+        'content_unchanged',
+        'duplicate',
+        'host_denied',
+        'injection_detected',
+        'insufficient_evidence',
+        'kill_switch_account',
+        'kill_switch_domain',
+        'kill_switch_global',
+        'low_relevance',
+        'outdated_role',
+        'rate_limited',
+        'robots_disallowed',
+        'sending_disabled',
+        'source_unavailable',
+        'terms_prohibited',
+        'weak_evidence',
+      ].sort(),
+    )
+    // F2's own set stays exactly what it was.
+    expect(reachableReasonCodes('F2').sort()).toEqual(
       [
         'budget_exhausted',
         'content_unchanged',
@@ -103,5 +126,11 @@ describe('reason-code registry', () => {
     // Nothing owned by a later milestone claims to be reachable now.
     expect(reachable).not.toContain('approval_hash_mismatch')
     expect(reachable).not.toContain('browser_blocked')
+    // F4's four in particular: F3 creates no Contact and composes no draft, so none
+    // of the codes that describe a contact route can be raised by anything yet.
+    expect(reachable).not.toContain('outreach_not_permitted')
+    expect(reachable).not.toContain('no_public_recruiting_route')
+    expect(reachable).not.toContain('executive_only_contact')
+    expect(reachable).not.toContain('legal_policy_mismatch')
   })
 })

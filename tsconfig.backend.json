@@ -1,0 +1,42 @@
+{
+  "//": [
+    "The backend config: src/, test/, tools/. Exactly what tsconfig.json held through",
+    "F0-F2, unchanged, with app/ excluded.",
+    "",
+    "It is separate from the root config for one load-bearing reason: `lib` here does",
+    "NOT include DOM. That is what makes a bare `fetch`, `XMLHttpRequest` or",
+    "`WebSocket` in backend code a TYPE error as well as an ESLint error and an AST-",
+    "scanner failure. Letting Next's DOM lib leak into src/ would quietly remove one of",
+    "the three layers F0 built to keep FetchPolicyGate the only network path.",
+    "",
+    "`npm run typecheck` runs this first, then the root (UI) config."
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "tools/**/*.ts", "types/**/*.d.ts", "*.ts"],
+  "exclude": ["node_modules", "generated", "app", "next-env.d.ts", ".next"]
+}

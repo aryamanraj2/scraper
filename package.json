@@ -7,7 +7,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.backend.json && tsc --noEmit",
     "lint": "eslint .",
     "check:no-raw-http": "tsx tools/check-no-raw-http.ts",
     "db:generate": "prisma generate",
@@ -29,15 +29,24 @@
     "seed:tracks": "tsx tools/seed-role-tracks.ts",
     "intel:run": "tsx tools/run-intelligence.ts",
     "verify:f2": "tsx tools/verify-f2.ts",
-    "seed:budget": "tsx tools/seed-global-budget.ts"
+    "seed:budget": "tsx tools/seed-global-budget.ts",
+    "seed:operator": "tsx tools/seed-operator-data.ts",
+    "packets:run": "tsx tools/run-packets.ts",
+    "verify:f3": "tsx tools/verify-f3.ts",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start"
   },
   "dependencies": {
     "@mozilla/readability": "0.6.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "linkedom": "0.18.13",
+    "next": "16.3.4",
     "pg": "8.23.0",
     "pg-boss": "12.30.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "robots-parser": "3.0.1",
     "tldts": "7.4.12",
     "undici": "7.29.1",
@@ -46,6 +55,8 @@
   "devDependencies": {
     "@types/node": "22.20.1",
     "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "dotenv": "17.4.2",
     "eslint": "10.10.0",
     "prisma": "7.10.0",

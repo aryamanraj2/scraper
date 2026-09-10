@@ -13,7 +13,8 @@ on your behalf.
 | `docs/architecture-plan.md` | The approved architecture plan, verbatim. The implementation contract. |
 | `docs/F1-HANDOVER.md` | What F0 built, every deviation from the plan and why, and the F1 task. |
 | `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. |
-| `docs/F3-HANDOVER.md` | What F2 built, every deviation, and the F3 task. **Point a new session at this.** |
+| `docs/F3-HANDOVER.md` | What F2 built, every deviation, and the F3 task. |
+| `docs/F4-HANDOVER.md` | What F3 built, every deviation, and the F4 task. **Point a new session at this.** |
 | `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built in F2. |
 
 Two documents govern this repo:
@@ -26,16 +27,38 @@ Two documents govern this repo:
   Defect ids (A1–A12) and verification ids (B1–B7) referenced in code comments
   point at it.
 
-## Status: F2 complete
+## Status: F3 complete — you can start applying
 
 F0 made the safeguards structural. F1 added ingestion: a yc-oss seed loader, domain
 canonicalization, ATS detection with Lever slug resolution, and the three required
-adapters — Greenhouse, Lever and Ashby. F2 adds intelligence: the four-track role
+adapters — Greenhouse, Lever and Ashby. F2 added intelligence: the four-track role
 taxonomy and a deterministic matcher, a scorer rebuilt to exactly 100 against a
 versioned weight set, `SignalGraphService` enforcing D4's source precedence as a hard
 floor, static fetch + Readability through the preflight, Firecrawl escalation behind
-a flag, ATS job-count deltas, and the `HandoffLlmGateway`. Still no contacts, no
+a flag, ATS job-count deltas, and the `HandoffLlmGateway`.
+
+**F3 is the payload.** It generates `ApplicationPacket`s — a track-tailored resume, the
+employer's own application URL, and prefilled answers drawn only from `ApprovedClaim` —
+plus a Next.js dashboard with the review queues and the evidence viewer. **37 packets
+across 17 companies** today.
+
+**The system prepares applications; it never submits them** (H8). Still no contacts, no
 drafting, no sending, and no optional adapter.
+
+```bash
+npm run seed:operator   # your resumes and approved claims
+npm run packets:run     # generate packets — no network
+npm run dev             # the dashboard, http://localhost:3000
+```
+
+| F3 exit criterion | Where it is proven |
+|---|---|
+| 30 reviewable application packets | `npm run verify:f3` against `outreach_dev` |
+| Every packet reconstructible from evidence | `npm run verify:f3`; `test/policy/application-packet.test.ts` |
+| Prefilled answers come only from `ApprovedClaim` | `test/policy/application-packet.test.ts` |
+| Browser- and API-derived facts display identically | `test/policy/application-packet.test.ts` |
+| Nothing auto-submits (H8) | `test/policy/application-packet.test.ts`; `npm run verify:f3` |
+| `application_submitted` reachable through a real path | `test/policy/reason-code-coverage.test.ts` |
 
 | F2 exit criterion | Where it is proven |
 |---|---|
@@ -62,7 +85,7 @@ drafting, no sending, and no optional adapter.
 | Secrets round-trip without touching logs | `test/integration/secret-store.test.ts` |
 | No HTTP client reachable outside the gate | `test/policy/no-raw-http.test.ts`, `test/policy/fetch-policy-gate.test.ts` |
 
-Run `npm run verify:f0`, `npm run verify:f1` and `npm run verify:f2` for the criteria in one report each.
+Run `npm run verify:f0` through `npm run verify:f3` for the criteria in one report each.
 
 ## Setup
 
@@ -92,6 +115,11 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm run verify:f0` | The four F0 exit criteria, individually reported |
 | `npm run verify:f1` | The seven F1 exit criteria, individually reported |
 | `npm run verify:f2` | The seven F2 exit criteria, individually reported |
+| `npm run verify:f3` | The eleven F3 exit criteria, individually reported |
+| `npm run seed:operator` | Load your four resumes (hashed from disk) and your approved claims |
+| `npm run packets:run` | Generate application packets from stored rows. No network |
+| `npm run packets:run -- --drain` | Write fulfilled LLM tasks into `ResearchBrief` and merge packet answers |
+| `npm run dev` | The review dashboard (Next.js) |
 | `npm run intel:run` | Score the corpus from stored rows. No network unless `--research N` |
 | `npm run intel:run -- --research 40` | **Live.** Walk the signal graph and research up to N companies |
 | `npm run intel:run -- --briefs` | Queue a research brief per qualified lead |
@@ -105,7 +133,7 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm run db:migrate` | Apply migrations (dev) |
 | `npm run check:no-raw-http` | Fail if anything outside the gate can reach the network |
 
-## Four things that will bite you if you don't know them
+## Six things that will bite you if you don't know them
 
 **Never run `prisma db push`.** The two partial unique indexes from D3 cannot be
 expressed in `schema.prisma` and live in a hand-written SQL migration. `db push`
@@ -127,7 +155,18 @@ it reaches `F5`.
 `ingest:seed`, `fixtures:record`, and `intel:run -- --research N`. All three go
 through `FetchPolicyGate`, so a fixture can never describe a capability the pipeline
 does not have. Everything else replays `test/fixtures/` through undici's `MockAgent`
-with net connect disabled.
+with net connect disabled. `packets:run` and the dashboard touch nothing.
+
+**`npm run typecheck` runs two TypeScript configs.** `tsconfig.backend.json` covers
+`src/`, `test/` and `tools/` with **no DOM lib**, which is what makes a bare `fetch`
+there a type error as well as a lint error and an AST-scanner failure. The root
+`tsconfig.json` is Next's and needs `lib: DOM`. Merging them would silently delete one
+of the three layers keeping `FetchPolicyGate` the only network path.
+
+**The system never submits an application.** H8 is the one decision in Part H marked
+irreversible. Greenhouse exposes an authenticated submission endpoint; no code path
+here calls it, and a test scans every source file to keep it that way. The dashboard's
+button is labelled "I applied", not "Apply".
 
 ## Layout
 

@@ -17,7 +17,11 @@ import { join, relative, sep } from 'node:path'
 import ts from 'typescript'
 
 const ROOT = process.cwd()
-const SCAN_DIRS = ['src', 'test', 'tools']
+// app/ is in scope from F3. The dashboard talks to Postgres through Prisma and
+// issues no HTTP of its own, and its tsconfig deliberately has `lib: DOM` — which
+// makes `fetch` a typed global there. That removes one of the three layers for UI
+// code specifically, so this scanner has to cover it.
+const SCAN_DIRS = ['src', 'test', 'tools', 'app']
 
 /** The one file allowed to reach the network. See its header for why. */
 const PERMITTED = new Set([join('src', 'core', 'policy', 'http', 'raw-client.ts')])
@@ -48,7 +52,7 @@ function* walk(dir: string): Generator<string> {
     if (entry === 'node_modules' || entry === 'generated' || entry.startsWith('.')) continue
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) yield* walk(full)
-    else if (full.endsWith('.ts') && !full.endsWith('.d.ts')) yield full
+    else if ((full.endsWith('.ts') || full.endsWith('.tsx')) && !full.endsWith('.d.ts')) yield full
   }
 }
 

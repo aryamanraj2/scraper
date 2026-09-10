@@ -39,10 +39,20 @@ enum CompanyStatus {
 
 /// A4: Lead.status stops at qualification. Composition/approval belongs to Draft,
 /// transmission to SendAttempt.
+///
+/// `accepted` and `deferred` are F3's review outcomes (Part F: "accept/defer/reject").
+/// They sit after `qualified` because qualification is what the scorer decides and
+/// review is what the human decides — collapsing the two would make "the scorer
+/// liked it" and "I chose to act on it" the same fact, and F4's outreach predicate
+/// needs to tell them apart. `deferred` is re-entrant by design: it carries
+/// `insufficient_evidence`, which D1 defines as a budget decision rather than a
+/// verdict, so a deferred lead stays eligible for more research.
 enum LeadStatus {
   candidate
   qualifying
   qualified
+  accepted
+  deferred
   rejected
 
   @@map("lead_status")
@@ -424,8 +434,16 @@ model ResearchBudget {
   /// Null companyId = the global monthly envelope.
   companyId      String?  @map("company_id")
   periodMonth    String   @map("period_month")
+  /// Every research unit, free or paid. This is what `checkBudget` enforces, and
+  /// what makes Part G's "cap zero -> all research no-ops" true of the whole path
+  /// rather than only its billed half (F2 §4.7).
   creditsSpent   Int      @default(0) @map("credits_spent")
   creditsCap     Int      @map("credits_cap")
+  /// The subset of `creditsSpent` that consumed a paid vendor allowance — Firecrawl
+  /// today. F2 spent 1,015 credits and none of them were money, so a single counter
+  /// cannot answer "how much of the free tier is left"; this one can. It is
+  /// deliberately not a second cap: one ceiling is what makes the no-op test hold.
+  vendorCreditsSpent Int  @default(0) @map("vendor_credits_spent")
   billedUsdSpent Decimal  @default(0) @map("billed_usd_spent") @db.Decimal(12, 6)
   billedUsdCap   Decimal  @map("billed_usd_cap") @db.Decimal(12, 6)
   createdAt      DateTime @default(now()) @map("created_at")
@@ -680,14 +698,30 @@ model ResumeVersion {
 }
 
 /// The only factual statements the drafting system may make about the candidate.
+///
+/// This is the provenance table for candidate facts, the way `Evidence` is for
+/// company facts: an application answer or a draft sentence cites a row here, and an
+/// answer citing none is a schema error rather than a review finding (F3, F4).
+///
+/// `key` exists so the seeder is idempotent — re-running it must update the operator's
+/// claims, never duplicate fifty rows. `sourceRef` records the document the claim was
+/// lifted from, so the operator can re-verify a statement the system is about to make
+/// on their behalf without reading it back out of the database.
 model ApprovedClaim {
   id        String   @id @default(uuid(7))
+  /// Stable slug. The seeder upserts on this; nothing else may key off `text`,
+  /// which the operator is expected to edit.
+  key       String   @unique @map("key")
   text      String   @map("text")
   category  String   @map("category")
+  /// Where this statement comes from, e.g. `resumes/Resume_IOS.tex` or `operator`
+  /// for facts the operator supplied directly (availability, work authorization).
+  sourceRef String?  @map("source_ref")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([category, isActive])
   @@map("approved_claim")
 }
 
@@ -766,6 +800,7 @@ model Lead {
   contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   scoreVersion ScoreVersion? @relation(fields: [scoreVersionId], references: [id], onDelete: SetNull)
   drafts       Draft[]
+  applicationPackets ApplicationPacket[]
 
   @@index([status, leadKind])
   @@index([companyId, campaignCycle])
@@ -928,12 +963,26 @@ model ApplicationPacket {
   id              String                  @id @default(uuid(7))
   companyId       String                  @map("company_id")
   opportunityId   String?                 @map("opportunity_id")
+  /// The lead this packet was generated from. The packet needs the lead's stored
+  /// score reasons to be reviewable (F3's evidence viewer renders them), and F4's
+  /// outreach predicate reads back the other way — case 3 permits a follow-up only
+  /// once an application exists for the lead.
+  leadId          String?                 @map("lead_id")
   resumeVersionId String                  @map("resume_version_id")
   /// The official ATS URL the user submits through, by hand.
   officialUrl     String                  @map("official_url")
   /// Drawn only from ApprovedClaim records.
   prefilledAnswers Json                   @map("prefilled_answers")
   citedEvidenceIds String[]               @map("cited_evidence_ids")
+  /// The ApprovedClaim rows the answers draw on. Mirrors citedEvidenceIds so the
+  /// traceability check is one query per axis rather than a walk of the JSON.
+  approvedClaimIds String[]               @map("approved_claim_ids")
+  /// Frozen at accept over the same shape A7 will hash for a Draft: the artefact the
+  /// human approved, not the row as it stands now. F4 computes `approval_hash` over
+  /// an equivalent structure, so keeping an accepted packet immutable here is what
+  /// lets that happen without redesigning this table.
+  packetHash      String?                 @map("packet_hash")
+  acceptedAt      DateTime?               @map("accepted_at")
   status          ApplicationPacketStatus @default(prepared) @map("status")
   submittedAt     DateTime?               @map("submitted_at")
   outcomeNote     String?                 @map("outcome_note")
@@ -942,9 +991,16 @@ model ApplicationPacket {
 
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   opportunity   Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  lead          Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
   resumeVersion ResumeVersion @relation(fields: [resumeVersionId], references: [id], onDelete: Restrict)
 
+  /// Part F: "one packet per (opportunity, resume version)". Regenerating a packet
+  /// for a posting the operator already has must update it, not hand them a second
+  /// copy of the same application. Postgres treats NULLs as distinct, so this does
+  /// not constrain a packet with no opportunity — F3 never creates one.
+  @@unique([opportunityId, resumeVersionId])
   @@index([status])
+  @@index([leadId])
   @@map("application_packet")
 }
 
@@ -1002,6 +1058,11 @@ model LlmTask {
   /// Evidence rows the response is allowed to cite. A citation outside this set is
   /// a validation failure, not a review finding.
   allowedEvidenceIds String[] @map("allowed_evidence_ids")
+  /// The same rule for candidate facts. `Evidence` bounds what may be said about the
+  /// COMPANY; `ApprovedClaim` bounds what may be said about the CANDIDATE, and F3's
+  /// prefilled answers need both. Empty for a kind that makes no candidate claims,
+  /// which is why an empty set means "cite none", never "cite anything".
+  allowedApprovedClaimIds String[] @map("allowed_approved_claim_ids")
   subjectType   String        @map("subject_type")
   subjectId     String        @map("subject_id")
   status        LlmTaskStatus @default(pending) @map("status")

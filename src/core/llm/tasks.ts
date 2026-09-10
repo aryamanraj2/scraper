@@ -54,8 +54,42 @@ const ResearchBriefResponse = z.object({
 
 export type ResearchBriefResponse = z.infer<typeof ResearchBriefResponse>
 
+/**
+ * F3's task kind: the two application answers that need judgment.
+ *
+ * Everything else on a packet is deterministic — a name, a degree, a work-
+ * authorization status is already sitting in `ApprovedClaim` and needs no model. What
+ * needs one is "why this company" and "what of your experience is relevant here",
+ * because the answer has to hold company `Evidence` and candidate `ApprovedClaim`
+ * side by side.
+ *
+ * Both citation arrays are mandatory in spirit and one of them in schema:
+ * `approvedClaimIds` is `.min(1)` because an answer about the candidate that cites no
+ * approved claim is a fact this system was never authorized to state, and
+ * `handover.md` §11's golden test is that such a thing is a schema error rather than
+ * something a reviewer is expected to notice. `citedEvidenceIds` may be empty — an
+ * answer about the candidate's own experience need say nothing about the employer —
+ * but anything it does cite must be in the task's allow-set.
+ */
+const PacketAnswerResponse = z.object({
+  answers: z
+    .array(
+      z.object({
+        questionKey: z.enum(['why_company', 'relevant_experience']),
+        answer: z.string().min(1).max(1200),
+        approvedClaimIds: z.array(z.string().min(1)).min(1),
+        citedEvidenceIds: z.array(z.string().min(1)).default([]),
+      }),
+    )
+    .min(1)
+    .max(2),
+})
+
+export type PacketAnswerResponse = z.infer<typeof PacketAnswerResponse>
+
 export const LLM_TASK_KINDS = {
   researchBrief: 'research_brief',
+  packetAnswers: 'packet_answers',
 } as const
 
 export type LlmTaskKind = (typeof LLM_TASK_KINDS)[keyof typeof LLM_TASK_KINDS]
@@ -74,6 +108,13 @@ export const LLM_TASK_SCHEMAS: LlmTaskSchemaEntry[] = [
     promptVersion: 'research_brief@1',
     schema: ResearchBriefResponse,
     description: '2-4 evidence-backed facts about the company, each with a citation, plus a relevance note.',
+  },
+  {
+    kind: LLM_TASK_KINDS.packetAnswers,
+    promptVersion: 'packet_answers@1',
+    schema: PacketAnswerResponse,
+    description:
+      'Application answers for "why this company" and "relevant experience", each citing at least one ApprovedClaim and any company Evidence it leans on.',
   },
 ]
 
@@ -102,16 +143,43 @@ export function jsonSchemaFor(schema: z.ZodType<unknown>): unknown {
  * that nests citations one level deeper must not quietly escape the check.
  */
 export function collectCitedEvidenceIds(value: unknown, found = new Set<string>()): Set<string> {
+  return collectIds(value, EVIDENCE_ID_KEYS, EVIDENCE_ID_ARRAY_KEYS, found)
+}
+
+/**
+ * The same walk for candidate facts (F3).
+ *
+ * `Evidence` bounds what may be said about the COMPANY; `ApprovedClaim` bounds what
+ * may be said about the CANDIDATE. A prefilled application answer makes both kinds of
+ * statement in one sentence, so both need an allow-set and both need to be checked
+ * the same way — by walking the whole response rather than reading a known field, so
+ * a schema that nests citations one level deeper cannot escape the check.
+ */
+export function collectCitedApprovedClaimIds(value: unknown, found = new Set<string>()): Set<string> {
+  return collectIds(value, CLAIM_ID_KEYS, CLAIM_ID_ARRAY_KEYS, found)
+}
+
+const EVIDENCE_ID_KEYS = new Set(['evidenceId', 'evidence_id'])
+const EVIDENCE_ID_ARRAY_KEYS = new Set(['citedEvidenceIds', 'evidenceIds', 'cited_evidence_ids'])
+const CLAIM_ID_KEYS = new Set(['approvedClaimId', 'approved_claim_id', 'claimId'])
+const CLAIM_ID_ARRAY_KEYS = new Set(['approvedClaimIds', 'approved_claim_ids', 'claimIds'])
+
+function collectIds(
+  value: unknown,
+  scalarKeys: ReadonlySet<string>,
+  arrayKeys: ReadonlySet<string>,
+  found: Set<string>,
+): Set<string> {
   if (Array.isArray(value)) {
-    for (const item of value) collectCitedEvidenceIds(item, found)
+    for (const item of value) collectIds(item, scalarKeys, arrayKeys, found)
     return found
   }
   if (value !== null && typeof value === 'object') {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      if ((key === 'evidenceId' || key === 'evidence_id') && typeof child === 'string') found.add(child)
-      else if ((key === 'citedEvidenceIds' || key === 'evidenceIds') && Array.isArray(child)) {
+      if (scalarKeys.has(key) && typeof child === 'string') found.add(child)
+      else if (arrayKeys.has(key) && Array.isArray(child)) {
         for (const id of child) if (typeof id === 'string') found.add(id)
-      } else collectCitedEvidenceIds(child, found)
+      } else collectIds(child, scalarKeys, arrayKeys, found)
     }
   }
   return found

@@ -14,6 +14,9 @@ import { researchCompanyPage } from '../../src/intel/research/page-research.js'
 import { scoreCompanyAndPersist } from '../../src/intel/scoring/run.js'
 import { COMPANY_SCORING_SELECT } from '../../src/intel/scoring/collect.js'
 import { RESEARCH_ACTIONS } from '../../src/intel/research/actions.js'
+import { seedApprovedClaims } from '../../src/apply/claims/seed-claims.js'
+import { generateApplicationPackets } from '../../src/apply/packet/generate.js'
+import { acceptPacket, markPacketSubmitted } from '../../src/apply/packet/lifecycle.js'
 import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
 import { mockAgent } from '../setup.js'
 
@@ -338,9 +341,113 @@ const scenarios: Record<string, () => Promise<ReasonCodeValue>> = {
     })
     return (audit?.reasonCode as ReasonCodeValue | undefined) ?? ('sending_disabled' as ReasonCodeValue)
   },
+
+  // --- F3 application funnel ----------------------------------------------
+
+  /**
+   * The operator prepares a packet, accepts it, applies through the employer's own
+   * form, and marks it submitted. Driven through the real generator and the real
+   * lifecycle — no hand-constructed call to a helper — because the thing being
+   * verified is that the code lands on the LEAD, which is where F4's outreach
+   * predicate looks for it.
+   *
+   * `application_submitted` is the code that STOPS OUTREACH for an opportunity. Part C
+   * permits a cold message in three cases and case 3 — a targeted follow-up — only
+   * once an application exists. If this state were a UI flag rather than a transition,
+   * F4 would inherit a hole where its precondition should be.
+   *
+   * Note what this scenario does NOT do: submit anything. H8 is irreversible in Part
+   * H. `markPacketSubmitted` records that a human already applied; it issues no
+   * request, and no code path in this system posts to an ATS.
+   */
+  application_submitted: async () => {
+    const db = testDb()
+    await seedApprovedClaims(db)
+
+    const resume = await db.resumeVersion.create({
+      data: {
+        label: 'SDE — backend / systems',
+        trackKey: 'sde',
+        linkUrl: 'file:///resumes/backend.pdf',
+        filePath: '/resumes/backend.pdf',
+        fileSha256: 'a'.repeat(64),
+      },
+      select: { id: true },
+    })
+    const track = await db.roleTrack.create({
+      data: {
+        key: 'sde',
+        displayName: 'SDE',
+        positiveKeywords: ['backend'],
+        negativeKeywords: [],
+        defaultResumeVersionId: resume.id,
+      },
+      select: { id: true },
+    })
+    const company = await db.company.create({
+      data: {
+        canonicalDomain: 'applyhere.example',
+        displayName: 'Apply Here Inc',
+        countries: ['India'],
+        locations: [],
+        tags: [],
+      },
+      select: { id: true },
+    })
+    const opportunity = await db.opportunity.create({
+      data: {
+        companyId: company.id,
+        roleTrackId: track.id,
+        kind: 'published_role',
+        status: 'open',
+        title: 'Backend Engineering Intern',
+        roleUrl: 'https://job-boards.greenhouse.io/applyhere/jobs/1',
+        lastSeenAt: new Date(),
+        externalId: '1',
+      },
+      select: { id: true },
+    })
+    const lead = await db.lead.create({
+      data: {
+        companyId: company.id,
+        opportunityId: opportunity.id,
+        leadKind: 'posted_role',
+        status: 'qualified',
+        primaryTrack: 'sde',
+        primaryTrackReason: 'fixture',
+        campaignCycle: '2026-09',
+        score: 80,
+      },
+      select: { id: true },
+    })
+
+    const generated = await generateApplicationPackets(db)
+    const packet = generated.packets[0]
+    if (!packet) return 'sending_disabled' as ReasonCodeValue
+
+    const accepted = await acceptPacket(db, packet.packetId)
+    if (!accepted.ok) return 'sending_disabled' as ReasonCodeValue
+
+    const submitted = await markPacketSubmitted(db, packet.packetId)
+    if (!submitted.ok) return 'sending_disabled' as ReasonCodeValue
+
+    // The packet records the act; the LEAD records the consequence.
+    const row = await db.applicationPacket.findUniqueOrThrow({ where: { id: packet.packetId } })
+    if (row.status !== 'submitted' || row.submittedAt === null) {
+      return 'sending_disabled' as ReasonCodeValue
+    }
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'packet.submitted', subjectId: packet.packetId },
+      select: { reasonCode: true },
+    })
+    if (audit?.reasonCode !== 'application_submitted') return 'sending_disabled' as ReasonCodeValue
+
+    const after = await db.lead.findUniqueOrThrow({ where: { id: lead.id } })
+    return (after.statusReason as ReasonCodeValue | null) ?? ('sending_disabled' as ReasonCodeValue)
+  },
 }
 
-describe('every F2-owned reason code is reachable through its real code path', () => {
+describe('every F3-owned reason code is reachable through its real code path', () => {
   for (const [code, run] of Object.entries(scenarios)) {
     it(`raises ${code}`, async () => {
       expect(await run()).toBe(code)
@@ -348,7 +455,7 @@ describe('every F2-owned reason code is reachable through its real code path', (
   }
 
   it('covers exactly the codes this build stage claims to raise', () => {
-    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F2')].sort())
+    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F3')].sort())
   })
 })
 

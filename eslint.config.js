@@ -11,10 +11,13 @@ const NETWORK_MODULES = [
 ]
 
 export default tseslint.config(
-  { ignores: ['generated/**', 'node_modules/**', 'prisma/migrations/**'] },
+  { ignores: ['generated/**', 'node_modules/**', 'prisma/migrations/**', '.next/**'] },
   ...tseslint.configs.recommended,
   {
-    files: ['**/*.ts'],
+    // .tsx included from F3: the dashboard's tsconfig has `lib: DOM`, so `fetch` is a
+    // typed global in app/ and the type layer no longer catches it there. The lint and
+    // AST layers must.
+    files: ['**/*.ts', '**/*.tsx'],
     rules: {
       'no-restricted-imports': ['error', {
         paths: NETWORK_MODULES.map((name) => ({
