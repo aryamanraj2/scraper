@@ -1,8 +1,26 @@
-# F4 Handover — The Drafting Sandbox
+# F4 Handover — Contact Acquisition and the Drafting Sandbox
 
 **Written:** 2026-09-10, at the end of the F3 session.
-**For:** the next implementation session, which builds F4 and nothing else.
-**Status of the repo when this was written:** F3 complete, 11/11 exit criteria met, 357 tests passing, F0–F2 committed (3 commits on `main`), F3 uncommitted.
+**Revised:** 2026-09-10, mid-F4, after the operator's volume-outreach scope decision and
+a partial F4 build. **§11 is the only place that says what is already done — read it
+before you write a line of code.**
+**For:** the next implementation session, which finishes F4 and nothing else.
+**Status of the repo when this was revised:** F3 complete and committed (`7f469fe`),
+11/11 exit criteria met. F4 roughly half built and **uncommitted**: 390 tests passing,
+typecheck and lint clean, `MILESTONE_STAGE` still `'F3'` on purpose.
+
+> ### If you read nothing else
+>
+> 1. **F3 is finished.** Do not rebuild it. 37 application packets exist in
+>    `outreach_dev`.
+> 2. **F4's scope was amended by the operator** after F3 shipped — volume outreach,
+>    two contact tiers, a fourth outreach case. That amendment is §10 and it is
+>    binding. It supersedes the narrow reading of Part C in the sections above it,
+>    and those sections were written before it existed.
+> 3. **About half of F4 is already built and tested** in the working tree. §11 is the
+>    inventory: what exists, what is deliberately absent, and what is left.
+> 4. **`MILESTONE_STAGE` still reads `'F3'`.** That is correct and deliberate — it is
+>    bumped only when the four F4 reason codes are driven through real paths (§6).
 
 ---
 
@@ -461,7 +479,13 @@ Three things F3 resolved:
 
 ---
 
-## 8. F4 — the task
+## 8. F4 — the task, as the PLAN defines it
+
+> **Read §10 first.** The operator amended this scope after F3 shipped: volume
+> outreach, two contact tiers, and a fourth outreach case. Everything below is still
+> true of the plan and still describes work F4 must do — the contact curator, the
+> composer, the Quality Gate, the approval flow — but §10 changes the *shape* of the
+> contact half and adds a case to the predicate. Where they disagree, §10 wins.
 
 > **Plan, Part F, verbatim:** *F4 — Drafting sandbox. Contact curator (role aliases default, published University Recruiting second); `ResearchBrief`; constrained composer with per-sentence `evidenceId`; Quality Gate with versioned checks; approval flow computing `approval_hash`; three-case outreach predicate. → 30 citation-backed drafts, zero external sends; the outreach-case predicate rejects every path outside Part C.*
 
@@ -546,9 +570,10 @@ Things F4 can get right for F5:
 
 ---
 
-## 10. Open questions for the user
+## 9a. Open questions as they stood at the end of F3
 
-Carry these forward until answered.
+**Historical. Superseded by §13**, which carries the live list. Kept because the
+reasoning behind each one is still the reasoning.
 
 1. **India coverage: 0 of 37 packets** (§8.4). Still the highest-value open question in the project, and now visible in the payload rather than only in the scores. It is a corpus decision, not a code decision.
 2. **New: backfill the 1,015 historical research credits onto the global envelope?** §4.9 fixed the charging bug going forward but did not rewrite history. The global row reads 0/1,000 while the per-company rows sum to 1,015. Backfilling is the accurate record, but it would immediately refuse all further research for September 2026 — for work that cost nothing, since none of it was Firecrawl. Options: backfill and raise the cap, backfill `vendorCreditsSpent` only (it is genuinely 0), or leave the gap documented.
@@ -560,3 +585,387 @@ Carry these forward until answered.
 8. **New: 15 of 37 packets are senior/staff titles** (§4.4) and **0 are internships** (§8.3). Both are corpus symptoms. Widening the feed (option 1 in §8.4) is the single action that addresses India coverage, internship supply and seniority spread at once.
 9. ~~`ResearchBrief` persistence~~ — **closed.** Built in F3 (§7).
 10. ~~The research-credit unit conflates free and paid~~ — **closed.** Split in F3 (§4.10).
+
+---
+
+## 10. THE OPERATOR'S SCOPE AMENDMENT — binding, and it supersedes §8 above
+
+Everything from §1 to §9 was written at the end of F3, describing the *plan's* F4. After
+that, the operator issued a scope decision that changes what F4 is. Where the two
+disagree, **this section wins**. It is reproduced faithfully rather than paraphrased,
+because it amends `handover.md`, which no earlier milestone was permitted to do.
+
+### 10.1 The target shape
+
+> Volume outreach. 1,000–2,000 verified contacts, evidence-personalized message,
+> track-matched resume linked, asking about internship openings. Expected reply rate
+> **0.1–0.5%**.
+
+The operator's stated edge over template spray is **per-sentence evidence citation**,
+with the explicit instruction: *"do not weaken it to go faster."* That is the one thing
+in this milestone that must not be traded for throughput. If a choice arises between
+shipping more drafts and keeping every sentence cited, keep the citation.
+
+### 10.2 Two contact tiers, both required
+
+| | Tier A | Tier B |
+|---|---|---|
+| What | Recruiting aliases and published HR/recruiter addresses | Named individual employees |
+| Role | **The volume engine** | Quality |
+| Excluded | — | founders, CEOs, C-suite, VPs — **never**, at any tier |
+| Source | Employer's own careers / contact / job pages, through `FetchPolicyGate` | Verified lookup provider |
+| Amends `handover.md`? | **No.** This is §8.1 item 1 as already specified | Yes — §1.2's data-broker clause |
+| Built in F4? | **Yes, and exercised** | Seam only — see 10.5 |
+
+`handover.md` §1.1 is **not** amended. The operator kept the executive exclusion
+explicitly, and it is the boundary of the whole broadening.
+
+### 10.3 `handover.md`:19 amended, and what that actually means
+
+The clause reads: *"Never infer an email address from a name/domain pattern, use a
+personal email, buy a contact list, or use a data broker."*
+
+The amendment permits **verified lookup providers behind their own seam, plus a host
+allow entry, fixtures, and a `verified` flag on `Contact`.** Blind pattern construction
+stays **off by default** behind `CONTACT_ALLOW_PATTERN_INFERENCE`, operator-flippable,
+logged per row so bounce analysis can separate the methods.
+
+Two things were put to the operator before any of this was built, and both stand:
+
+- **Most "verified lookup providers" are data brokers** — Hunter, Apollo, RocketReach,
+  Lusha, Dropcontact. The amendment permits a broker, not merely a verifier. That was
+  stated plainly and accepted.
+- **B4's compliance posture was reasoned about role aliases at hand-approved volume.**
+  Named individuals, sourced from a third party, at 1,000–2,000 scale is a different
+  fact pattern — GDPR Art. 14 (notice when data comes from a third party) in
+  particular. B4's own closing line: *"If this activity is ever expanded... this
+  posture must be re-examined with actual legal advice."* Flagged once, not repeated;
+  the controls (opt-out, suppression, sender identity) are built regardless.
+
+### 10.4 The fourth outreach case
+
+`intern_availability_inquiry`. Permitted when a **verified** `Contact` exists at a
+qualified company, regardless of posting or prior application. **Evaluated last**, so
+case 3 still wins wherever an application exists.
+
+The operator's own amendment to Part G's proving test: `outreach_not_permitted` still
+fires for a posted-role lead with a clear route, no application, **and no verified
+contact**. Built exactly so — see 11.1.
+
+### 10.5 What the operator scoped OUT of F4
+
+Asked directly which lookup provider to build against, the answer was:
+
+> Build `VerifiedContactProvider`, the `verified` flag, per-row method provenance, and
+> the fixture-backed fake. Flag defaults off, **no host allow entry, no ToS read yet.**
+> Tier A is the real working path this milestone… leave the amendment written down but
+> unexercised.
+
+So: **do not pick a vendor, do not read terms, do not add a host allow entry, do not
+call anything.** That is a later, reviewed act.
+
+### 10.6 The reporting requirement that decides the vendor question
+
+> Add to the F4 report: Tier A yield. Contacts found per company, how many companies
+> yielded zero, and which page types produced them (careers, contact, job posting,
+> footer). **That number decides whether a paid provider is worth buying, and right now
+> nobody has it.**
+
+Built (`src/outreach/contacts/yield-report.ts`) and **not yet run against live data**.
+Producing that number is the single highest-value remaining task in F4.
+
+### 10.7 The three tensions raised before building, and how they were settled
+
+**One first touch per company per cycle.** D3's partial unique index
+`one_first_touch_per_company_per_cycle` permits exactly one first-touch send per company
+per cycle, so Tier A and Tier B cannot both fire at one company and Tier B adds no
+volume. Operator decision: *"keep it 1 per small company and 2 for a decent one."*
+
+The threshold chosen, and it is a judgement call the next session may override:
+**`teamSize >= 100` → 2 slots, else 1; unknown → 1.** Reasoning: at 100+ there is
+usually a real recruiting function, so a second route is a genuinely different human;
+below that, two messages is a visible fraction of the company and reads as spray.
+Measured against the 21 qualified companies, the line falls between AssemblyAI (65) and
+Eight Sleep (100), giving 2 slots to 16 of 21.
+
+**This is not yet implemented.** The index lives on `send_attempt`, which F5 owns.
+F4's job is the *policy* — how many contacts per company may become drafts — and F5
+must replace the index with one that admits a bounded second slot. The recommended
+shape, so the database keeps a hard ceiling rather than trusting code:
+
+```sql
+-- F5: replaces one_first_touch_per_company_per_cycle
+CREATE UNIQUE INDEX one_first_touch_per_company_slot_per_cycle
+  ON send_attempt (company_id, campaign_cycle, touch_slot)
+  WHERE touch_number = 1 AND status IN ('in_flight','sent');
+```
+
+with `touch_slot ∈ {0,1}` and slot 1 allocated only when the company clears the size
+threshold. The database then structurally caps at 2 whatever policy says, and A2's
+per-contact index is untouched.
+
+**Per-message human approval.** Policy #6 was *not* amended and binds. At 2,000
+contacts that is 2,000 individual approvals against F6's 20/day ceiling — roughly
+**five months of sending**. The operator confirmed: *"Yes — per message, unchanged."*
+F4 builds `approval_hash` per draft exactly as A7 specifies. The arithmetic is F5/F6's
+problem and is flagged in §12.
+
+**Corpus is now the bottleneck.** 17 companies cannot produce 2,000 contacts. The
+operator's instruction: *"F1 needs `--feed all --limit 2000` plus additional seed feeds.
+**Do not run it inside F4; specify what it needs.**"* Specified in §12.1.
+
+### 10.8 The message shape
+
+> Short. tldr line. One evidence-cited company sentence. One or two `ApprovedClaim`
+> candidate sentences. Availability window. Resume link. Direct ask. **Model it on a
+> real reply-getting cold email, not a cover letter.**
+
+The availability window and the resume link are both already available as
+`ApprovedClaim` rows and `ResumeVersion.linkUrl` — see §12.4 on the `file://` problem.
+
+---
+
+## 11. WHAT IS ALREADY BUILT — the inventory, and the only section that says so
+
+All of it is **uncommitted** in the working tree. `npm test` → **33 files, 390 tests
+passing**; `npm run typecheck` and `npm run lint` clean. Nothing below needs revisiting
+unless you disagree with it, in which case raise it with the operator rather than
+changing it.
+
+```
+ M package.json                          + contacts:curate script
+ M prisma/schema.prisma                  enums, Contact columns, generator pin (11.5)
+ M src/core/config/config.ts             + CONTACT_ALLOW_PATTERN_INFERENCE
+ M src/core/policy/outreach-case.ts      REWRITTEN — the fourth case (11.1)
+ M test/unit/outreach-case.test.ts       11 tests, incl. case 4 and its boundary
+ M test/integration/secret-store.test.ts          fixture: new required Contact columns
+ M test/integration/send-attempt-indexes.test.ts  same
+?? prisma/migrations/20260910120000_f4_contacts/  applied; D3 indexes verified intact
+?? src/outreach/contacts/classify.ts     150  extraction + classification, pure
+?? src/outreach/contacts/executive-filter.ts 117  §1.1 enforced (11.2)
+?? src/outreach/contacts/curate.ts       354  Tier A curator (11.3)
+?? src/outreach/contacts/provider.ts      89  Tier B seam + fake, unexercised
+?? src/outreach/contacts/yield-report.ts 142  the operator's yield number (10.6)
+?? tools/run-contacts.ts                  94  LIVE curation + report. NEVER RUN YET
+?? test/unit/contact-classify.test.ts    171  19 tests
+?? test/policy/contact-curation.test.ts  266  10 tests, each a red-team attempt
+```
+
+### 11.1 The fourth outreach case — done
+
+`src/core/policy/outreach-case.ts` was rewritten. Evaluation order is **3 → 1 → 2 → 4**,
+and the ordering is load-bearing: a case-3 follow-up references a submitted application,
+which Part C calls the highest-response category available, so checking case 4 first
+would silently downgrade the best message the system can send.
+
+`OutreachFacts` gained two fields: `hasVerifiedContact` and `leadQualified`. Case 4
+requires both.
+
+**An unverified contact opens no case at all** — it is excluded from
+`hasPublicRecruitingContact` too. That is precisely what makes
+`CONTACT_ALLOW_PATTERN_INFERENCE` safe to expose: the flag can produce candidate rows
+for the operator to confirm by hand, and they can never become a send target on their
+own. Pinned by test.
+
+`outreach_not_permitted` now narrows to: posted role + clear route + no application +
+contact exists but is **not** verified. Still reachable, still tested, and it is Part G's
+most important policy test.
+
+### 11.2 The executive filter — done, and it is the boundary of the amendment
+
+`isExecutiveContact(email, title)` reads **both** the title and the local part, because
+careers pages publish `founders@` and `ceo@` with no title text at all and a
+title-only filter would pass those straight through. It fails closed on ambiguity: an
+unparseable title is not waved through.
+
+One subtlety worth keeping. A bare `\bpartner\b` rejected *"Talent Partner Associate"* —
+a recruiter, exactly who Tier B wants. "Partner" is an executive at a fund or a law
+firm and an individual contributor in a recruiting org, so it has its own rule with a
+negative lookbehind for `talent|people|hr|business|recruiting|recruitment|staffing`.
+Tested in both directions.
+
+The audit row for a refusal deliberately **does not record the address**. §1.1 says
+never target them; keeping the address where a later query could recover it would be
+keeping exactly what the rule says not to keep. Asserted by test.
+
+### 11.3 The Tier A curator — done, never run live
+
+`curateCompanyContacts(db, fetcher, company)` walks a short fixed path list
+(`/careers`, `/contact`, `/jobs`, `/about`, `/`), capped at 3 pages, through
+`FetchPolicyGate`, charging one research credit per page. It stops on the first page
+that yields a role alias, and a **preflight refusal breaks the loop** — F1 §4.15's rule,
+because a refusal is about the host and every other path would refuse identically.
+
+Stored rows are `verified: true`, `discoveryMethod: 'page_published'`, with
+`sourcePageKind` recorded for the yield report and an `Evidence` row quoting a verbatim
+window **around the address** rather than the top of the page (F2 §4.1's lesson).
+
+Refused, each with a reason code and an audit row: executives; addresses off the
+company's domain; RFC 2142 mailboxes and `noreply@` (`abuse@` and `privacy@` receiving a
+cold recruiting message is the worst outcome this code could produce); placeholder
+domains; and **pages shaped like instructions to an agent**.
+
+That last one matters more here than anywhere else in the system, and the test says so:
+a page that can talk the *curator* into storing an address of its choosing is a far
+better attack than one that can talk the scorer into a bad label.
+
+### 11.4 What F3's tests taught F4 — two harness traps
+
+**`.persist()` interceptors accumulate across tests in a file.** Four curator tests were
+silently passing a contact from an *earlier* test's page, because
+`mockAgent.get('https://acme.example')` returns the same pool. Every test now uses its
+own domain (`exec.example`, `offdomain.example`, `hostilepage.example`…), which is the
+convention the F2 policy tests already used.
+
+**A transport error throws; it does not return `ok: false`.** `fetchPage` turns an HTTP
+error into a result, but a DNS miss or connection reset throws out of undici. The
+curator now catches per page and records `source_unavailable` — F1's invariant, *"a
+skipped source is an OUTCOME, not an exception"*, which the first draft violated.
+
+### 11.5 A latent F3 defect, fixed — read this before touching tsconfig or Prisma
+
+**Symptom:** ~90 `TS7006 "implicitly has an any type"` errors on `.map()` callbacks, in
+files nobody had touched, with no error anywhere near the cause. `npm test` stayed green
+throughout, because vitest transpiles without typechecking.
+
+**Cause:** F3 added Next, and `next build` **rewrites the root `tsconfig.json`** —
+including setting `moduleResolution: "bundler"`. Prisma's `prisma-client` generator
+inspects the nearest `tsconfig.json` to decide whether to emit `.js` extensions on
+relative imports. Under `bundler` extensionless imports are legal, so the next
+`prisma generate` emitted `import * as $Class from "./internal/class"` — invalid under
+the backend's `moduleResolution: NodeNext`.
+
+**Why it was silent and total:** every generated Prisma file carries `// @ts-nocheck`.
+The unresolved imports raised nothing, `$Class` and `Prisma` degraded to `any`, and all
+28 model delegates became `any` — so every `findMany` returned `any` and every callback
+parameter became an implicit any.
+
+**Fix:** both options pinned explicitly in `schema.prisma`, so generation no longer
+depends on what Next does to `tsconfig.json`:
+
+```prisma
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+```
+
+**Generalise it:** a code generator that infers its output from a config file another
+tool rewrites is a time bomb. If you add a tool that touches `tsconfig.json`, check what
+else reads it.
+
+Related, and much smaller: an empty `node_modules/@types/react 2` directory (macOS
+duplicate debris from an interrupted install) fails `tsc` with `Cannot find type
+definition file for 'react 2'`, because TypeScript loads every directory under
+`@types/` as an implicit type library. `ls node_modules/@types/` for a name containing a
+space.
+
+---
+
+## 12. WHAT IS LEFT IN F4
+
+In dependency order. Items 1 and 2 are independent and either can go first.
+
+### 12.1 Run the Tier A curator live, and report the yield  *(operator-approved, scoped)*
+
+The operator approved **"start with 5, then decide."** Nothing has run.
+
+```bash
+npm run contacts:curate -- --limit 5      # then inspect, then widen
+npm run contacts:curate -- --all          # all 21 qualified companies
+npm run contacts:curate -- --report       # yield report only, no network
+```
+
+~21 companies × up to 3 pages at the per-host rate delay ≈ 5–8 minutes; ~40–60 research
+credits. The report prints contacts per company, zero-yield companies, a page-kind
+breakdown, executives rejected, refusals by reason, and a **verdict line** on whether a
+paid provider is worth buying.
+
+**Ask before widening past 5.** It is the fourth command in the project that touches a
+live source.
+
+### 12.2 The composer, the Quality Gate, and the approval flow
+
+Not started. The message shape is 10.8. Required properties:
+
+- **Per-sentence citation, both sides.** A company sentence carries an `evidenceId`; a
+  candidate sentence carries an `approvedClaimId`. Both mechanisms already exist and are
+  enforced in `fulfilTask` (`uncited_evidence`, `uncited_claim`) — wire the draft schema
+  to them rather than building a third check. F3's `src/apply/packet/answers.ts` is the
+  worked example.
+- **A new `LlmTask` kind**, `outreach_draft@1`, added to `LLM_TASK_SCHEMAS`. The CLI,
+  the validation and both citation rules are kind-agnostic; nothing else changes.
+- **Quality Gate with versioned checks**, writing `Draft.gateResult`.
+- **`approval_hash`** — A7's exact field list. `src/apply/packet/hash.ts` is the
+  rehearsal and §4.11 explains the two non-obvious decisions already made and tested:
+  hash the resume **file** (`fileSha256`), not just its row id, because the operator
+  edits resumes in place; and sort citation arrays but never sentence order, because
+  order is what the human read.
+
+### 12.3 The milestone obligations — three steps, all or nothing
+
+F4 owns four codes: `executive_only_contact`, `legal_policy_mismatch`,
+`no_public_recruiting_route`, `outreach_not_permitted`.
+
+1. Set `MILESTONE_STAGE = 'F4'` in `src/core/config/stage.ts`. **It currently reads
+   `'F3'` and that is correct until the four codes are driven through real paths.**
+2. Add a scenario for each to `test/policy/reason-code-coverage.test.ts`, driving the
+   **real** curator and predicate — not a hand-constructed call to a helper.
+   `executive_only_contact` already has a real path (11.2) and needs only wiring in.
+   `legal_policy_mismatch` has none yet and needs a jurisdiction check to exist.
+3. Change the hardcoded `'F3'` references to `'F4'` and extend the expected list in
+   `test/unit/reason-codes.test.ts`.
+
+Skip step 1 and the coverage test passes while the milestone is a lie. Do step 1 without
+2 and 3 and the tests fail loudly — that is the intent.
+
+### 12.4 `tools/verify-f4.ts`
+
+Alongside the other four, same shape, using `isAtOrAfter` and never asserting on a
+lifecycle state a later milestone will legitimately advance (F2 §4.9). Suggested
+criteria: 30 citation-backed drafts · zero external sends · every personalization
+sentence cites evidence · every candidate sentence cites an `ApprovedClaim` · no
+founder/CEO/executive contact can exist · no `Contact` without an `evidenceId` · the
+outreach predicate rejects every path outside the four cases · `approval_hash` frozen
+and compared byte-for-byte · Tier A yield reported · all of `verify:f0`–`f3` still green.
+
+### 12.5 `docs/F5-HANDOVER.md`
+
+Following this file's structure. Must carry forward:
+
+- **The corpus specification** (operator instruction, do not run it in F4): F1 needs
+  `--feed all --limit 2000` plus additional seed feeds. 17 companies cannot produce
+  2,000 contacts. State what "additional seed feeds" needs — each is an F2a optional
+  adapter with its own verification gate, fixtures and host allow entry.
+- **The `send_attempt` index change** for the 1-or-2 slots per company rule (10.7),
+  with the SQL sketch.
+- **The 2,000-approvals × 20/day arithmetic** — roughly five months. Policy #6 is
+  unamended and is the throughput ceiling.
+- **The resume `file://` problem.** `ResumeVersion.linkUrl` currently holds `file://`
+  paths, which is honest for F3 (the operator uploads a PDF into an ATS by hand) and
+  **useless in an email**. F5 cannot send until the four PDFs are hosted and
+  `npm run seed:operator` re-run with real URLs.
+- Everything still open in §13.
+
+---
+
+## 13. OPEN QUESTIONS — carried forward
+
+1. **India coverage: 0 of 37 packets** (34 USA, 3 UK). Unchanged and now compounded by
+   the volume target. Corpus decision, not a code decision (12.5).
+2. **Backfill the 1,015 historical research credits onto the global envelope?** §4.9
+   fixed the charging bug forward but did not rewrite history; the global row reads
+   0/1,000 while per-company rows sum to 1,015. Backfilling is accurate but would
+   immediately refuse all further research for September 2026 — for work that cost
+   nothing, since none of it was Firecrawl.
+3. **Resume URLs are `file://` paths.** Blocking for F5, not for F4 (12.5).
+4. **Firecrawl student credits — still unclaimed**, still the only untested path in F2.
+   `vendorCreditsSpent` now exists to measure what it costs.
+5. **15 of 37 packets are senior/staff titles and 0 are internships.** Corpus symptoms;
+   widening the feed addresses these, India coverage and contact volume at once.
+6. **Which lookup provider, if the yield number says one is needed** (10.6). Deliberately
+   unanswered — no vendor chosen, no terms read, by operator instruction.
+7. **Git:** F0–F3 are four commits on `main` (`7f469fe` is F1–F3). All F4 work is
+   uncommitted. `docs/` became trackable only in F3 — see the callout in §0.

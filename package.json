@@ -35,7 +35,10 @@
     "verify:f3": "tsx tools/verify-f3.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "start": "next start"
+    "start": "next start",
+    "contacts:curate": "tsx tools/run-contacts.ts",
+    "drafts:run": "tsx tools/run-drafts.ts",
+    "verify:f4": "tsx tools/verify-f4.ts"
   },
   "dependencies": {
     "@mozilla/readability": "0.6.0",

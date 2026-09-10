@@ -87,9 +87,60 @@ const PacketAnswerResponse = z.object({
 
 export type PacketAnswerResponse = z.infer<typeof PacketAnswerResponse>
 
+/**
+ * F4's task kind: the two sentences of an outreach message that need judgment.
+ *
+ * Everything else in a message is deterministic — the TL;DR, the resume link, the
+ * ask and the sign-off are registered templates (`src/outreach/draft/templates.ts`)
+ * rendered from values already in the database, and the availability sentence is an
+ * `ApprovedClaim`'s own words. What needs a session is the evidence-cited company
+ * sentence and the candidate sentence that answers it.
+ *
+ * Both citation arrays are `.min(1)`, and that is the milestone's whole point:
+ *
+ *  - `evidenceIds` on the company sentence is D5's invariant — *"an unsupported claim
+ *    is a schema error, not a review finding"* — finally load-bearing rather than
+ *    latent, because F4 is the first milestone that composes a message.
+ *  - `approvedClaimIds` on the candidate sentence is F3 §4.1's candidate-side
+ *    analogue. A statement this system makes about the operator must trace to a
+ *    document the operator wrote.
+ *
+ * The operator's instruction in §10.1 — *"do not weaken it to go faster"* — is
+ * enforced here, at the schema, rather than in whoever is reviewing. A response that
+ * omits a citation cannot be accepted by `llm:fulfil` at all.
+ */
+const OutreachDraftResponse = z.object({
+  /**
+   * No "Re:", no false urgency. The Quality Gate checks this too; requiring it in the
+   * schema means the session is told the rule rather than only judged by it.
+   */
+  subject: z.string().min(1).max(90),
+  /** One sentence about the employer, every clause of it supported by cited Evidence. */
+  companySentence: z.object({
+    text: z.string().min(1).max(400),
+    evidenceIds: z.array(z.string().min(1)).min(1),
+  }),
+  /**
+   * One or two sentences about the candidate (§10.8), each citing the ApprovedClaim
+   * rows its facts come from.
+   */
+  candidateSentences: z
+    .array(
+      z.object({
+        text: z.string().min(1).max(400),
+        approvedClaimIds: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1)
+    .max(2),
+})
+
+export type OutreachDraftResponse = z.infer<typeof OutreachDraftResponse>
+
 export const LLM_TASK_KINDS = {
   researchBrief: 'research_brief',
   packetAnswers: 'packet_answers',
+  outreachDraft: 'outreach_draft',
 } as const
 
 export type LlmTaskKind = (typeof LLM_TASK_KINDS)[keyof typeof LLM_TASK_KINDS]
@@ -115,6 +166,13 @@ export const LLM_TASK_SCHEMAS: LlmTaskSchemaEntry[] = [
     schema: PacketAnswerResponse,
     description:
       'Application answers for "why this company" and "relevant experience", each citing at least one ApprovedClaim and any company Evidence it leans on.',
+  },
+  {
+    kind: LLM_TASK_KINDS.outreachDraft,
+    promptVersion: 'outreach_draft@1',
+    schema: OutreachDraftResponse,
+    description:
+      'A short outreach message: a subject line, one Evidence-cited sentence about the company, and one or two ApprovedClaim-cited sentences about the candidate. Every citation must come from the task\'s allow-sets.',
   },
 ]
 

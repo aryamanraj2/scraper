@@ -14,8 +14,9 @@ on your behalf.
 | `docs/F1-HANDOVER.md` | What F0 built, every deviation from the plan and why, and the F1 task. |
 | `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. |
 | `docs/F3-HANDOVER.md` | What F2 built, every deviation, and the F3 task. |
-| `docs/F4-HANDOVER.md` | What F3 built, every deviation, and the F4 task. **Point a new session at this.** |
-| `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built in F2. |
+| `docs/F4-HANDOVER.md` | What F3 built, every deviation, and the operator's volume-outreach scope amendment (§10), which is still binding. |
+| `docs/F5-HANDOVER.md` | What F4 built, F4's twelve deviations, the Tier A yield number, and the F5 task. **Point a new session at this.** |
+| `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built in F2; carries the message-composition kind as of F4. |
 
 Two documents govern this repo:
 
@@ -27,7 +28,7 @@ Two documents govern this repo:
   Defect ids (A1–A12) and verification ids (B1–B7) referenced in code comments
   point at it.
 
-## Status: F3 complete — you can start applying
+## Status: F4 complete — applications, and a drafting sandbox that sends nothing
 
 F0 made the safeguards structural. F1 added ingestion: a yc-oss seed loader, domain
 canonicalization, ATS detection with Lever slug resolution, and the three required
@@ -42,14 +43,46 @@ employer's own application URL, and prefilled answers drawn only from `ApprovedC
 plus a Next.js dashboard with the review queues and the evidence viewer. **37 packets
 across 17 companies** today.
 
-**The system prepares applications; it never submits them** (H8). Still no contacts, no
-drafting, no sending, and no optional adapter.
+**F4 adds the outreach half.** A Tier A contact curator reads recruiting aliases off
+employer careers pages through the gate — never a founder, never an inferred address —
+and a composer turns a qualified lead into a short message where **every sentence about
+the company cites an `Evidence` row and every sentence about you cites an
+`ApprovedClaim`**. An uncited sentence is a schema error, not a review finding. A
+Quality Gate with versioned checks runs before a human ever sees a draft, and approval
+freezes an `approval_hash` over A7's exact field list.
+
+**The system prepares applications; it never submits them** (H8). **It composes
+messages; it sends nothing** — sending needs two independent factors and this build has
+neither.
 
 ```bash
-npm run seed:operator   # your resumes and approved claims
-npm run packets:run     # generate packets — no network
-npm run dev             # the dashboard, http://localhost:3000
+npm run seed:operator     # your resumes and approved claims
+npm run packets:run       # generate application packets — no network
+npm run contacts:curate -- --limit 5     # LIVE: read careers pages for aliases
+npm run drafts:run                       # compose drafts — no network
+npm run drafts:run -- --queue            # queue the judgment sentences
+npm run llm:next -- --kind outreach_draft   # drain them from a Claude Code session
+npm run drafts:run -- --drain            # merge, then run the Quality Gate
+npm run dev               # the dashboard, http://localhost:3000
 ```
+
+**Tier A yield, measured live across all 21 qualified companies:** 19 were actually
+read, 4 published a usable address, 15 published none — and **not one published a
+dedicated recruiting alias**. All four hits are general `info@`/`hello@` inboxes. That
+is the number that decides whether a paid lookup provider is worth buying, and it says
+employer pages alone will not reach the operator's 1,000–2,000 target. See
+`docs/F5-HANDOVER.md` §2.2.
+
+| F4 exit criterion | Where it is proven |
+|---|---|
+| Every personalization sentence cites evidence | `test/policy/outreach-draft.test.ts`; `npm run verify:f4` |
+| Every candidate sentence cites an `ApprovedClaim` | `test/policy/outreach-draft.test.ts` |
+| No founder/CEO/executive contact can be created | `test/policy/contact-curation.test.ts`; `verify:f4` re-runs the filter over every stored row |
+| No `Contact` without an `Evidence` row | `Contact.evidenceId` is a required column; `npm run verify:f4` |
+| The outreach predicate rejects every path outside the four cases | `test/policy/reason-code-coverage.test.ts` — Part G's most important policy test |
+| `approval_hash` frozen, compared byte-for-byte | `test/policy/outreach-draft.test.ts` |
+| A draft cannot cite evidence about another company | `test/policy/outreach-draft.test.ts` |
+| Zero external sends | `npm run verify:f4` |
 
 | F3 exit criterion | Where it is proven |
 |---|---|
@@ -116,6 +149,12 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm run verify:f1` | The seven F1 exit criteria, individually reported |
 | `npm run verify:f2` | The seven F2 exit criteria, individually reported |
 | `npm run verify:f3` | The eleven F3 exit criteria, individually reported |
+| `npm run verify:f4` | The thirteen F4 exit criteria, individually reported |
+| `npm run contacts:curate` | **Live.** Read employer pages for recruiting aliases. `-- --all --max-pages 5` |
+| `npm run contacts:curate -- --report` | The Tier A yield report only. No network |
+| `npm run drafts:run` | Compose outreach drafts from stored rows. No network |
+| `npm run drafts:run -- --queue` / `--drain` / `--gate` | Queue the judgment sentences, merge them, run the Quality Gate |
+| `npm run drafts:run -- --approve <id> --by <name>` | Freeze `approval_hash` over A7's field list |
 | `npm run seed:operator` | Load your four resumes (hashed from disk) and your approved claims |
 | `npm run packets:run` | Generate application packets from stored rows. No network |
 | `npm run packets:run -- --drain` | Write fulfilled LLM tasks into `ResearchBrief` and merge packet answers |
@@ -151,11 +190,12 @@ nothing: `src/core/config/stage.ts` carries a `MILESTONE_STAGE` constant that on
 a reviewed commit changes, and sending stays refused with `sending_disabled` until
 it reaches `F5`.
 
-**Only three commands touch a live source**, and none runs in `npm test`:
-`ingest:seed`, `fixtures:record`, and `intel:run -- --research N`. All three go
-through `FetchPolicyGate`, so a fixture can never describe a capability the pipeline
-does not have. Everything else replays `test/fixtures/` through undici's `MockAgent`
-with net connect disabled. `packets:run` and the dashboard touch nothing.
+**Only four commands touch a live source**, and none runs in `npm test`:
+`ingest:seed`, `fixtures:record`, `intel:run -- --research N`, and
+`contacts:curate`. All four go through `FetchPolicyGate`, so a fixture can never
+describe a capability the pipeline does not have. Everything else replays
+`test/fixtures/` through undici's `MockAgent` with net connect disabled.
+`packets:run`, `drafts:run` and the dashboard touch nothing.
 
 **`npm run typecheck` runs two TypeScript configs.** `tsconfig.backend.json` covers
 `src/`, `test/` and `tools/` with **no DOM lib**, which is what makes a bare `fetch`
@@ -191,6 +231,9 @@ src/intel/scoring/            ScoreVersion, the pure scorer, the collector, pers
 src/intel/research/           fetch + Readability, injection scanning, Firecrawl escalation
 src/intel/signals/            ATS job-count deltas (B2)
 src/intel/signal-graph.ts     D4 source precedence as a hard floor
+src/apply/                    ApprovedClaim library, packet generation, the evidence viewer
+src/outreach/contacts/        the Tier A curator, the executive filter, the yield report
+src/outreach/draft/           the composer, the citation choke point, Quality Gate, approval_hash
 test/fixtures/                real responses, captured through the gate
 tools/                        AST guard, verifiers, seeders, fixture recorder
 ```

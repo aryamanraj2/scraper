@@ -14,6 +14,26 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
+
+  // Both pinned EXPLICITLY rather than inferred, and this is load-bearing.
+  //
+  // Prisma's `prisma-client` generator decides whether to emit relative imports with
+  // a `.js` extension by inspecting the nearest tsconfig.json. F3 added Next, which
+  // REWRITES the root tsconfig.json to `moduleResolution: "bundler"` — where
+  // extensionless imports are legal. The next `prisma generate` therefore emitted
+  // `import * as $Class from "./internal/class"`, which is invalid under the backend's
+  // `moduleResolution: NodeNext`.
+  //
+  // The failure is silent and total: every generated file carries `// @ts-nocheck`, so
+  // the unresolved imports raise nothing, `$Class` and `Prisma` degrade to `any`, and
+  // every model delegate becomes `any`. The visible symptom is ~90 TS7006 "implicitly
+  // has an any type" errors on `.map()` callbacks in files nobody touched, with no
+  // error anywhere near the actual cause.
+  //
+  // Pinning both options makes generation independent of whatever Next does to
+  // tsconfig.json. See docs/F5-HANDOVER.md §4.
+  moduleFormat        = "esm"
+  importFileExtension = "js"
 }
 
 datasource db {
@@ -145,17 +165,65 @@ enum OutreachCase {
   application_route_unclear
   /// Case 3 — targeted follow-up AFTER applying, public recruiting contact exists.
   post_application_followup
+  /// Case 4 — an operator amendment to Part C (F4). A short inquiry about internship
+  /// availability, permitted when a VERIFIED contact exists at a qualified company,
+  /// whatever the posting situation. Evaluated LAST, so case 3 still wins wherever an
+  /// application exists and the message can reference it.
+  intern_availability_inquiry
 
   @@map("outreach_case")
 }
 
+/// H2's tiers, as amended by the operator for volume outreach (F4).
+///
+/// **Tier A — the volume engine.** Role-based routes published on the employer's own
+/// pages: `careers_alias`, `talent_alias`, `university_recruiting`. Nobody's personal
+/// address, so the lowest exposure of anything here, and the only tier F4 actually
+/// exercises.
+///
+/// **Tier B — quality.** A named human, `named_talent` for a published Talent/People
+/// contact and `named_employee` for any other individual contributor or line manager.
+///
+/// `handover.md` §1.1 is NOT amended: founders, CEOs, C-suite and VPs are never
+/// targeted, at any tier. There is deliberately no enum value that could hold one, and
+/// `src/outreach/contacts/executive-filter.ts` refuses them with
+/// `executive_only_contact` before a row can be written.
 enum ContactType {
   careers_alias
   talent_alias
   university_recruiting
   named_talent
+  named_employee
 
   @@map("contact_type")
+}
+
+/// How an address was obtained. Recorded per row so bounce analysis can separate the
+/// methods rather than averaging them, which is the whole point of letting the riskiest
+/// one exist at all.
+enum ContactDiscoveryMethod {
+  /// Read from a page the employer published, through FetchPolicyGate. Tier A.
+  page_published
+  /// Returned by a verified lookup provider. Seam exists; unexercised in F4.
+  lookup_provider
+  /// Constructed from a name/domain pattern. OFF unless CONTACT_ALLOW_PATTERN_INFERENCE
+  /// is set. Always `verified = false`, and an unverified contact opens NO outreach case.
+  pattern_inferred
+
+  @@map("contact_discovery_method")
+}
+
+/// Which kind of page produced a Tier A contact. Exists to answer one question the
+/// operator asked and nobody had data for: is a paid lookup provider worth buying, or
+/// do employer pages already yield enough?
+enum ContactSourcePageKind {
+  careers
+  contact
+  job_posting
+  footer
+  other
+
+  @@map("contact_source_page_kind")
 }
 
 enum ContactStatus {
@@ -636,6 +704,14 @@ model Contact {
   emailNormalized String       @map("email_normalized")
   contactType    ContactType   @map("contact_type")
   status         ContactStatus @default(active) @map("status")
+  /// False for anything this system did not read off a page or receive from a
+  /// verified provider. An UNVERIFIED contact opens no outreach case at all — it is a
+  /// candidate for the operator to confirm by hand, never a send target. That is what
+  /// makes CONTACT_ALLOW_PATTERN_INFERENCE safe to expose.
+  verified       Boolean       @default(false) @map("verified")
+  discoveryMethod ContactDiscoveryMethod @map("discovery_method")
+  /// Tier A only: which page kind yielded this address. Drives the yield report.
+  sourcePageKind ContactSourcePageKind? @map("source_page_kind")
   publicTitle    String?       @map("public_title")
   /// Mandatory: the public page this address was published on, with the excerpt
   /// and capture timestamp on the Evidence row.
@@ -646,6 +722,7 @@ model Contact {
 
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   leads        Lead[]
+  drafts       Draft[]
   sendAttempts SendAttempt[]
 
   @@unique([emailNormalized])
@@ -813,15 +890,43 @@ model Lead {
 model Draft {
   id              String       @id @default(uuid(7))
   leadId          String       @map("lead_id")
+  /// The recipient, pinned on the draft rather than read through the lead.
+  ///
+  /// F2 §4.15 keeps ONE Lead per company per campaign cycle, while the operator's F4
+  /// decision (§10.7) permits TWO contacts at a company with teamSize >= 100. Two
+  /// drafts under one lead therefore have two different recipients, which
+  /// `Lead.contactId` alone cannot express. A7 hashes `recipient_email_normalized`,
+  /// so the recipient has to be a property of the artefact that was approved.
+  contactId       String?      @map("contact_id")
+  /// §10.7: which of the company's permitted first-touch slots this draft occupies.
+  /// 0 always; 1 only when the company cleared the size threshold. F5 replaces
+  /// `one_first_touch_per_company_per_cycle` with an index over this column, so the
+  /// database keeps a hard ceiling of two rather than trusting policy code.
+  touchSlot       Int          @default(0) @map("touch_slot")
   researchBriefId String?      @map("research_brief_id")
   resumeVersionId String?      @map("resume_version_id")
   status          DraftStatus  @default(composing) @map("status")
   statusReason    ReasonCode?  @map("status_reason")
   subject         String?      @map("subject")
   bodyText        String?      @map("body_text")
-  /// Part C: any path to a draft outside these three cases is a policy violation.
+  /// The composed message as SENTENCES, each with its own citations, before it is
+  /// rendered into `bodyText`.
+  ///
+  /// D5's invariant is per-sentence: "the drafting schema requires an evidenceId on
+  /// every personalization sentence, so an unsupported claim is a schema error, not a
+  /// review finding." A rendered string cannot carry that — once the sentences are
+  /// joined, which citation supported which claim is unrecoverable, and F4's exit
+  /// criterion ("every personalization sentence cites evidence") stops being
+  /// checkable. This is `ApplicationPacket.prefilledAnswers` applied to a message.
+  composition     Json?        @map("composition")
+  /// Part C: any path to a draft outside these four cases is a policy violation.
   outreachCase    OutreachCase? @map("outreach_case")
   citedEvidenceIds String[]    @map("cited_evidence_ids")
+  /// The candidate side of the same rule (F3 §4.1). `Evidence` bounds what may be
+  /// said about the COMPANY; `ApprovedClaim` bounds what may be said about the
+  /// CANDIDATE, and a draft asserts both. Mirrors `citedEvidenceIds` so each axis is
+  /// one query rather than a walk of the JSON.
+  approvedClaimIds String[]    @map("approved_claim_ids")
   promptVersion   String?      @map("prompt_version")
   /// A7: sha256 over canonical_json({subject, body_text, recipient_email_normalized,
   /// resume_version_id, attachment_sha256[], cited_evidence_ids[], sender_identity,
@@ -834,10 +939,15 @@ model Draft {
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
   lead          Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
   researchBrief ResearchBrief? @relation(fields: [researchBriefId], references: [id], onDelete: SetNull)
   resumeVersion ResumeVersion? @relation(fields: [resumeVersionId], references: [id], onDelete: SetNull)
   sendAttempts  SendAttempt[]
 
+  /// One draft per recipient per cycle's slot. The company-level ceiling of two
+  /// lives on `send_attempt` (D3) where A2's invariant belongs — this only stops the
+  /// composer handing the operator two copies of the same message to the same person.
+  @@unique([leadId, contactId, touchSlot])
   @@index([status])
   @@map("draft")
 }

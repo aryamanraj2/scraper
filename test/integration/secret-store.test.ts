@@ -153,6 +153,8 @@ describe('suppression hashing (A10)', () => {
         companyId: company.id,
         emailNormalized: 'careers@example.com',
         contactType: 'careers_alias',
+          discoveryMethod: 'page_published',
+          verified: true,
         evidenceId: evidence.id,
         capturedAt: new Date(),
       },

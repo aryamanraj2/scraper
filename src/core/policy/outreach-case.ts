@@ -2,26 +2,53 @@ import { OutreachCase } from '../../../generated/prisma/enums.js'
 import type { ReasonCodeValue } from '../reason-codes/registry.js'
 
 /**
- * Part C, encoded as a policy predicate.
+ * Part C, encoded as a policy predicate — plus the operator's fourth case (F4).
  *
- * The funnel terminates in an application, not an email. Cold outreach is
- * permitted in exactly three cases:
+ * The plan's Part C permits cold outreach in exactly three cases:
  *
  *   1. Strong speculative-growth lead with no relevant posting.
  *   2. Company where the public application route is unclear.
  *   3. Targeted follow-up AFTER applying, when a public recruiting contact exists.
  *
- * Any other path to an OutreachDraft is a policy violation and is rejected with
- * `outreach_not_permitted`. The plan calls this the single most important policy
- * test in the suite, so the predicate is pure and total: it takes facts, returns a
- * decision, and has no way to be satisfied by a caller's intent.
+ * **F4 adds a fourth, by operator decision**, superseding the narrow reading of Part C:
  *
- * The enum's ordinals are the plan's 1/2/3.
+ *   4. `intern_availability_inquiry` — a short question about internship availability,
+ *      permitted when a **verified** contact exists at a qualified company, whatever
+ *      the posting situation.
+ *
+ * ## Why case 4 is evaluated last
+ *
+ * Case 3 messages reference a submitted application, which makes them relationship
+ * correspondence rather than cold mail — Part C calls that "the highest-response
+ * category available and the one least exposed to every concern in B4". If case 4 were
+ * checked first it would swallow every lead where an application already exists and
+ * silently downgrade the best message this system can send. So the order is: 3, then
+ * 1, then 2, then 4.
+ *
+ * ## What case 4 costs, stated plainly
+ *
+ * Before F4, a posted role with a clear application route and no application was a
+ * **policy violation** — the plan's instruction was "apply first". Case 4 permits a
+ * message there, provided the contact is verified. `outreach_not_permitted` therefore
+ * narrows to: a posted role, a clear route, no application, and a contact that exists
+ * but is **not verified**. That is a real narrowing and it was the operator's call; it
+ * is not an accident of refactoring, and the test that pins it is Part G's most
+ * important one.
+ *
+ * ## Why verification is the gate
+ *
+ * An unverified contact is one this system did not read off the employer's own page
+ * and did not receive from a verified provider — in practice, a pattern-inferred
+ * address. Those open **no** case at all. That is what makes
+ * `CONTACT_ALLOW_PATTERN_INFERENCE` safe to expose: the flag can produce candidate
+ * rows for the operator to confirm by hand, and they can never become a send target on
+ * their own.
  */
-export const OUTREACH_CASE_NUMBER: Record<OutreachCase, 1 | 2 | 3> = {
+export const OUTREACH_CASE_NUMBER: Record<OutreachCase, 1 | 2 | 3 | 4> = {
   [OutreachCase.speculative_no_posting]: 1,
   [OutreachCase.application_route_unclear]: 2,
   [OutreachCase.post_application_followup]: 3,
+  [OutreachCase.intern_availability_inquiry]: 4,
 }
 
 export type OutreachFacts = {
@@ -35,6 +62,13 @@ export type OutreachFacts = {
   hasPublicRecruitingContact: boolean
   /** The speculative-growth evidence cleared the qualification bar. */
   speculativeEvidenceStrong: boolean
+  /**
+   * A contact exists whose address this system read off a published page or received
+   * from a verified provider — never one it constructed. Case 4's precondition.
+   */
+  hasVerifiedContact: boolean
+  /** The lead cleared the scorer's queue threshold. Case 4's other precondition. */
+  leadQualified: boolean
 }
 
 export type OutreachDecision =
@@ -48,18 +82,21 @@ export function decideOutreachCase(facts: OutreachFacts): OutreachDecision {
     return { permitted: false, reason: 'no_public_recruiting_route' }
   }
 
-  // Case 3 is checked first and deliberately: once an application exists, the
-  // message references it, which makes it relationship correspondence rather than
-  // cold mail — the highest-response category and the least exposed of the three.
+  // Case 3 first, deliberately: once an application exists the message can reference
+  // it, which is the strongest and least exposed thing this system can send.
   if (facts.applicationSubmitted) {
     return { permitted: true, outreachCase: OutreachCase.post_application_followup }
   }
 
   // Case 1: no relevant posting, but the growth evidence is strong.
   if (!facts.hasRelevantPosting) {
-    return facts.speculativeEvidenceStrong
-      ? { permitted: true, outreachCase: OutreachCase.speculative_no_posting }
-      : { permitted: false, reason: 'weak_evidence' }
+    if (facts.speculativeEvidenceStrong) {
+      return { permitted: true, outreachCase: OutreachCase.speculative_no_posting }
+    }
+    // Thin evidence and no posting. Case 4 can still carry it if the contact is
+    // verified — the message is a question about availability, not a claim about the
+    // company, so it does not rest on evidence the way a speculative pitch does.
+    return internInquiryOr(facts, 'weak_evidence')
   }
 
   // Case 2: a posting exists but we could not find how to apply.
@@ -67,7 +104,15 @@ export function decideOutreachCase(facts: OutreachFacts): OutreachDecision {
     return { permitted: true, outreachCase: OutreachCase.application_route_unclear }
   }
 
-  // A posted role with a clear application route and no application submitted is
-  // the case the plan explicitly names as a violation: apply first.
-  return { permitted: false, reason: 'outreach_not_permitted' }
+  // A posted role with a clear route and no application. Under Part C alone this was
+  // a violation — apply first. Case 4 permits an availability inquiry here IF the
+  // contact is verified and the lead qualified; otherwise the original refusal stands.
+  return internInquiryOr(facts, 'outreach_not_permitted')
+}
+
+function internInquiryOr(facts: OutreachFacts, otherwise: ReasonCodeValue): OutreachDecision {
+  if (facts.hasVerifiedContact && facts.leadQualified) {
+    return { permitted: true, outreachCase: OutreachCase.intern_availability_inquiry }
+  }
+  return { permitted: false, reason: otherwise }
 }

@@ -287,3 +287,74 @@ cited claims' own words concatenated, never reworded.
 — eight prefilled answers each, with the judgment questions listed as unanswered and a
 reason. Draining the backlog upgrades a packet; it never unblocks one. A packet is
 never blocked on a session being opened.
+
+---
+
+## As built (F4)
+
+F4 is where the citation rule stops being a convenience and becomes the thing the
+product is sold on. The operator's scope note (`docs/F4-HANDOVER.md` §10.1) names
+per-sentence evidence citation as the edge over template spray and adds: *"do not
+weaken it to go faster."*
+
+### The F4 task kind
+
+`outreach_draft@1` — a subject line, **one** sentence about the company, and one or two
+about the candidate. It is the first kind where **both** citation arrays are `.min(1)`:
+
+| field | must cite | why |
+|---|---|---|
+| `companySentence.evidenceIds` | ≥1 `Evidence` | D5's invariant, finally load-bearing: F4 is the first milestone that composes a message |
+| `candidateSentences[].approvedClaimIds` | ≥1 `ApprovedClaim` | F3 §4.1's candidate side. A statement made on the operator's behalf must trace to a document they wrote |
+
+Everything else in the message is deterministic and needs no model: the TL;DR, the
+resume link, the ask and the sign-off are **registered templates** rendered from stored
+values, and the availability sentence is an `ApprovedClaim`'s own words. That is not
+only economy — an uncited free-text role would be the obvious way around both citation
+rules, so `src/outreach/draft/message.ts` requires a `templateId` on every role that
+carries no citation.
+
+### Three things F4 added to the payload contract
+
+**1. The recipient's address is never in the payload.** The session gets the contact
+*type* and public title only. It has no reason to know who the message goes to, and a
+payload is also where a scraped page's own text lives. Pinned by test.
+
+**2. The allow-set is scoped to the company.** `tempo.fit` was detected as using
+Greenhouse board token `tempo`, which belongs to Tempo Energy — so its evidence
+included eight postings hosted on `tempoenergy.com`. Offering those excerpts would
+invite a confident, correctly-cited sentence about the **wrong company**, which every
+existing check would pass: the citation is real, the excerpt verbatim, the URL
+resolves. `src/outreach/draft/evidence-scope.ts` filters the allow-set to the company's
+own registrable domain and genuine ATS hosts before the task is written, and the
+Quality Gate re-checks what a stored draft cites.
+
+yc-oss hosts are deliberately excluded. H7 makes the seed index a discovery source
+whose facts must be re-verified from the company's own site before being cited, and a
+draft is exactly the place that rule is for.
+
+**3. The instructions name the failure modes, rather than trusting them not to
+happen.** No generic praise (`handover.md` §8 names "I love what you're building"
+specifically), no claim of work authorization or a graduation date or an availability
+window, no claimed knowledge of internal hiring plans, no `Re:` subject. The Quality
+Gate checks for these afterwards regardless — the instruction tells the session the
+rule, the gate is what enforces it.
+
+### H10 degrades differently here, deliberately
+
+F3 measured H10 by producing 37 usable packets with the backlog untouched: an operator
+can submit an application with two questions blank.
+
+A message cannot work that way. Its evidence-cited sentence **is** the edge, so a draft
+with no fulfilled task is complete as a **record** and deliberately fails the Quality
+Gate with `missing_required_role`. The pipeline is not broken and nothing else is
+blocked; there is simply no honest message yet. Draining upgrades a draft, and never
+unblocks one.
+
+### Proven end to end on live data (F4 session)
+
+Four `outreach_draft` tasks queued from the live corpus. One claimed with `llm:next`,
+fulfilled with a message citing two real `Evidence` rows (the employer's own careers
+page and their own open posting) and three real `ApprovedClaim` rows, merged, gated and
+approved with a frozen `approval_hash`. The other three sit at `gate_failed`, correctly,
+waiting for their sentences.

@@ -25,6 +25,27 @@ const EnvSchema = z.object({
    */
   FIRECRAWL_API_KEY: z.string().optional(),
 
+  /**
+   * Blind pattern construction — building `first.last@domain` from a name and a
+   * domain nobody published together.
+   *
+   * OFF by default and operator-flippable, per the F4 scope note. `handover.md` §1.2
+   * still forbids it as a *targeting* method, and this flag does not amend that: a
+   * pattern-inferred `Contact` is written with `verified = false`, and an unverified
+   * contact opens **no** outreach case (`src/core/policy/outreach-case.ts`). What the
+   * flag buys is a candidate row the operator can confirm by hand, plus a per-row
+   * `discoveryMethod` so bounce analysis can separate the methods instead of
+   * averaging them — which is the only honest way to find out whether inference is
+   * worth anything.
+   *
+   * Turning it on cannot, by itself, cause a message to be sent to a constructed
+   * address. That is the property that makes it safe to expose at all.
+   */
+  CONTACT_ALLOW_PATTERN_INFERENCE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   USER_AGENT: z.string().min(1),
   ROBOTS_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
   DEFAULT_HOST_RATE_DELAY_MS: z.coerce.number().int().nonnegative().default(5_000),

@@ -41,13 +41,43 @@ describe('reason-code registry', () => {
     expect(Object.keys(ReasonCode).sort()).toEqual([...ALL_REASON_CODES].sort())
   })
 
-  it('marks the F3-owned codes as reachable and defers the rest', () => {
-    const reachable = reachableReasonCodes('F3')
-    // Everything F0, F1 and F2 could raise, plus F3's one: the code recorded when the
-    // operator marks a packet submitted. It is the code that STOPS OUTREACH for an
-    // opportunity — Part C case 3 permits a follow-up only after an application
-    // exists, and F4's outreach predicate reads this state.
+  it('marks the F4-owned codes as reachable and defers the rest', () => {
+    const reachable = reachableReasonCodes('F4')
+    // Everything F0-F3 could raise, plus F4's four. Three of them describe a contact
+    // route and could not exist before this milestone created the first `Contact`;
+    // the fourth, `outreach_not_permitted`, has had a fully unit-tested predicate
+    // since F0 and has been unreachable that whole time because nothing composed a
+    // draft. F4 is where Part G's most important policy test finally runs against a
+    // real path.
     expect(reachable.sort()).toEqual(
+      [
+        'application_submitted',
+        'budget_exhausted',
+        'content_unchanged',
+        'duplicate',
+        'executive_only_contact',
+        'host_denied',
+        'injection_detected',
+        'insufficient_evidence',
+        'legal_policy_mismatch',
+        'no_public_recruiting_route',
+        'outreach_not_permitted',
+        'kill_switch_account',
+        'kill_switch_domain',
+        'kill_switch_global',
+        'low_relevance',
+        'outdated_role',
+        'rate_limited',
+        'robots_disallowed',
+        'sending_disabled',
+        'source_unavailable',
+        'terms_prohibited',
+        'weak_evidence',
+      ].sort(),
+    )
+    // F3's own set stays exactly what it was: bumping the stage adds codes, it never
+    // reclassifies one that already shipped.
+    expect(reachableReasonCodes('F3').sort()).toEqual(
       [
         'application_submitted',
         'budget_exhausted',
@@ -124,13 +154,15 @@ describe('reason-code registry', () => {
       ].sort(),
     )
     // Nothing owned by a later milestone claims to be reachable now.
-    expect(reachable).not.toContain('approval_hash_mismatch')
     expect(reachable).not.toContain('browser_blocked')
-    // F4's four in particular: F3 creates no Contact and composes no draft, so none
-    // of the codes that describe a contact route can be raised by anything yet.
-    expect(reachable).not.toContain('outreach_not_permitted')
-    expect(reachable).not.toContain('no_public_recruiting_route')
-    expect(reachable).not.toContain('executive_only_contact')
-    expect(reachable).not.toContain('legal_policy_mismatch')
+    // F5's fourteen in particular. F4 composes and approves, but sends nothing — so
+    // every code that describes a transmission or its outcome is still unreachable,
+    // including `approval_hash_mismatch`, whose check F4 built and tested but whose
+    // raising belongs to D6's send gate.
+    expect(reachable).not.toContain('approval_hash_mismatch')
+    expect(reachable).not.toContain('hard_bounce')
+    expect(reachable).not.toContain('suppressed')
+    expect(reachable).not.toContain('cap_exceeded')
+    expect(reachable).not.toContain('stale_at_send')
   })
 })

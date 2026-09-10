@@ -15,6 +15,8 @@ import { scoreCompanyAndPersist } from '../../src/intel/scoring/run.js'
 import { COMPANY_SCORING_SELECT } from '../../src/intel/scoring/collect.js'
 import { RESEARCH_ACTIONS } from '../../src/intel/research/actions.js'
 import { seedApprovedClaims } from '../../src/apply/claims/seed-claims.js'
+import { curateCompanyContacts } from '../../src/outreach/contacts/curate.js'
+import { composeDrafts } from '../../src/outreach/draft/compose.js'
 import { generateApplicationPackets } from '../../src/apply/packet/generate.js'
 import { acceptPacket, markPacketSubmitted } from '../../src/apply/packet/lifecycle.js'
 import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
@@ -445,9 +447,226 @@ const scenarios: Record<string, () => Promise<ReasonCodeValue>> = {
     const after = await db.lead.findUniqueOrThrow({ where: { id: lead.id } })
     return (after.statusReason as ReasonCodeValue | null) ?? ('sending_disabled' as ReasonCodeValue)
   },
+
+  // --- F4 contacts and the drafting sandbox -------------------------------
+
+  /**
+   * A careers page that publishes only executives, read by the REAL curator through
+   * the REAL gate.
+   *
+   * `handover.md` §1.1 is the first non-negotiable in the document and the boundary
+   * of the operator's whole F4 broadening: named employees at any level became
+   * permissible, founders and C-suite explicitly did not. This is the scenario that
+   * proves the filter runs on a live path rather than only in unit tests.
+   *
+   * Note what the assertion also checks: the audit row does NOT contain the address.
+   * §1.1 says never target them, and keeping the address where a later query could
+   * recover it would be keeping exactly what the rule says not to keep.
+   */
+  executive_only_contact: async () => {
+    const db = testDb()
+    const company = await db.company.create({
+      data: {
+        canonicalDomain: 'execonly.example',
+        displayName: 'Exec Only',
+        countries: ['India'],
+        locations: [],
+        tags: [],
+      },
+      select: { id: true, canonicalDomain: true, displayName: true, countries: true },
+    })
+    await allowHost('execonly.example')
+    serveRobots('https://execonly.example', 'User-agent: *\nAllow: /\n')
+    const pool = mockAgent.get('https://execonly.example')
+    const html =
+      '<!doctype html><html><head><title>Contact</title></head><body><article>' +
+      '<p>Our leadership team is happy to hear from people. Chief Technology Officer — ' +
+      'cto@execonly.example. Founder — founders@execonly.example.</p></article></body></html>'
+    for (const p of ['/careers', '/contact', '/jobs', '/about', '/']) {
+      pool.intercept({ path: p, method: 'GET' }).reply(200, html).persist()
+    }
+
+    const outcome = await curateCompanyContacts(db, gate(), company)
+    if (outcome.contacts.length !== 0) return 'sending_disabled' as ReasonCodeValue
+    if ((await db.contact.count()) !== 0) return 'sending_disabled' as ReasonCodeValue
+
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'contact.refused', reasonCode: 'executive_only_contact' },
+      select: { reasonCode: true, metadata: true },
+    })
+    if (JSON.stringify(audit?.metadata).includes('cto@execonly.example')) {
+      return 'sending_disabled' as ReasonCodeValue
+    }
+    return (audit?.reasonCode as ReasonCodeValue | undefined) ?? ('sending_disabled' as ReasonCodeValue)
+  },
+
+  /**
+   * A qualified lead with no verified contact, driven through the REAL composer.
+   *
+   * `handover.md` §8: *"If no public recruiting route exists, keep the company
+   * researched but do not create an email lead."* The composer asks the Part C
+   * predicate, which refuses before anything is composed.
+   */
+  no_public_recruiting_route: async () => {
+    const db = testDb()
+    await draftWorld(db, { withContact: false })
+    const out = await composeDrafts(db)
+    if ((await db.draft.count()) !== 0) return 'sending_disabled' as ReasonCodeValue
+    return out.refusals[0]?.reason ?? ('sending_disabled' as ReasonCodeValue)
+  },
+
+  /**
+   * **Part G's single most important policy test**, finally running against a real
+   * path: *"Posted-role lead with no application → `outreach_not_permitted`."*
+   *
+   * The predicate has existed since F0, fully unit-tested and completely unreachable,
+   * because nothing created a draft. F4 is where that changes.
+   *
+   * The operator's fourth case narrowed what this means (§10.4), and the narrowing is
+   * exactly what this scenario encodes: a posted role with a clear application route
+   * and no application is refused when the contact exists but is **not verified**. A
+   * verified contact would open `intern_availability_inquiry` instead — which is the
+   * whole point of tying case 4 to verification, and is asserted separately in
+   * `test/policy/outreach-draft.test.ts`.
+   */
+  outreach_not_permitted: async () => {
+    const db = testDb()
+    // A posted role with a clear application route, no application, and a contact
+    // that exists but is UNVERIFIED — precisely the state a pattern-inferred address
+    // is written in, and the reason `CONTACT_ALLOW_PATTERN_INFERENCE` is safe to
+    // expose: the flag can produce candidate rows, and they can never become a send
+    // target on their own.
+    await draftWorld(db, { verified: false })
+    const out = await composeDrafts(db)
+    if ((await db.draft.count()) !== 0) return 'sending_disabled' as ReasonCodeValue
+    return out.refusals[0]?.reason ?? ('sending_disabled' as ReasonCodeValue)
+  },
+
+  /**
+   * A contact obtained by a method the operator's §1.2 amendment introduced, at a
+   * company in a region with no recorded review — driven through the REAL composer.
+   *
+   * B4 is explicit that no conclusion may be drawn about whether these regimes apply,
+   * so this is deliberately not "refuse the EU". It refuses the AMENDED PATH in a
+   * region the operator has not recorded a review for, which is the re-examination
+   * B4's own closing line asks for when the activity is expanded. Tier A — an address
+   * the employer published on their own page — never reaches the check at all.
+   */
+  legal_policy_mismatch: async () => {
+    const db = testDb()
+    await draftWorld(db, { countries: ['United Kingdom'], discoveryMethod: 'lookup_provider' })
+    const out = await composeDrafts(db)
+    if ((await db.draft.count()) !== 0) return 'sending_disabled' as ReasonCodeValue
+    return out.refusals.find((r) => r.reason === 'legal_policy_mismatch')?.reason
+      ?? ('sending_disabled' as ReasonCodeValue)
+  },
 }
 
-describe('every F3-owned reason code is reachable through its real code path', () => {
+/**
+ * A qualified lead with a contact, a resume, an opportunity and cited evidence —
+ * everything the composer needs, so a scenario can vary the one fact it is about.
+ */
+async function draftWorld(
+  db: ReturnType<typeof testDb>,
+  opts: {
+    verified?: boolean
+    /** False leaves the company with NO contact at all, which is a different fact. */
+    withContact?: boolean
+    countries?: string[]
+    discoveryMethod?: 'page_published' | 'lookup_provider' | 'pattern_inferred'
+  } = {},
+) {
+  await seedApprovedClaims(db)
+  const resume = await db.resumeVersion.create({
+    data: {
+      label: 'SDE — backend / systems',
+      trackKey: 'sde',
+      linkUrl: 'https://cv.example/backend.pdf',
+      filePath: '/r.pdf',
+      fileSha256: 'a'.repeat(64),
+    },
+    select: { id: true },
+  })
+  const track = await db.roleTrack.create({
+    data: {
+      key: 'sde',
+      displayName: 'SDE',
+      positiveKeywords: ['backend'],
+      negativeKeywords: [],
+      defaultResumeVersionId: resume.id,
+    },
+    select: { id: true },
+  })
+  const company = await db.company.create({
+    data: {
+      canonicalDomain: 'draftworld.example',
+      displayName: 'Draft World',
+      countries: opts.countries ?? ['India'],
+      locations: [],
+      tags: [],
+      teamSize: 40,
+    },
+    select: { id: true },
+  })
+  const evidence = await db.evidence.create({
+    data: {
+      companyId: company.id,
+      sourceUrl: 'https://draftworld.example/careers',
+      sourceType: 'company_page',
+      excerpt: 'Our platform team writes Go and runs Postgres at scale in Bengaluru.',
+      contentHash: 'dw1',
+      observedAt: new Date('2026-09-01T00:00:00Z'),
+      confidence: 0.8,
+      fetchedVia: 'static_fetch',
+    },
+    select: { id: true },
+  })
+  const opportunity = await db.opportunity.create({
+    data: {
+      companyId: company.id,
+      roleTrackId: track.id,
+      kind: 'published_role',
+      status: 'open',
+      title: 'Backend Engineering Intern',
+      roleUrl: 'https://job-boards.greenhouse.io/draftworld/jobs/1',
+      lastSeenAt: new Date(),
+      externalId: '1',
+    },
+    select: { id: true },
+  })
+  const contact =
+    opts.withContact === false
+      ? null
+      : await db.contact.create({
+          data: {
+            companyId: company.id,
+            emailNormalized: 'careers@draftworld.example',
+            contactType: 'careers_alias',
+            verified: opts.verified ?? true,
+            discoveryMethod: opts.discoveryMethod ?? 'page_published',
+            sourcePageKind: 'careers',
+            evidenceId: evidence.id,
+            capturedAt: new Date(),
+          },
+          select: { id: true },
+        })
+  await db.lead.create({
+    data: {
+      companyId: company.id,
+      opportunityId: opportunity.id,
+      ...(contact ? { contactId: contact.id } : {}),
+      leadKind: 'posted_role',
+      status: 'qualified',
+      primaryTrack: 'sde',
+      primaryTrackReason: 'fixture',
+      campaignCycle: '2026-09',
+      score: 84,
+      citedEvidenceIds: [evidence.id],
+    },
+  })
+}
+
+describe('every F4-owned reason code is reachable through its real code path', () => {
   for (const [code, run] of Object.entries(scenarios)) {
     it(`raises ${code}`, async () => {
       expect(await run()).toBe(code)
@@ -455,7 +674,7 @@ describe('every F3-owned reason code is reachable through its real code path', (
   }
 
   it('covers exactly the codes this build stage claims to raise', () => {
-    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F3')].sort())
+    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F4')].sort())
   })
 })
 

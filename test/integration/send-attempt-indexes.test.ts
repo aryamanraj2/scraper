@@ -29,6 +29,8 @@ async function fixture(opts: { contacts: number }) {
           companyId: company.id,
           emailNormalized: `careers+${i}@example.com`,
           contactType: 'careers_alias',
+          discoveryMethod: 'page_published',
+          verified: true,
           evidenceId: evidence.id,
           capturedAt: new Date(),
         },
