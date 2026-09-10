@@ -23,10 +23,13 @@ import type { RoleTrackKey } from '../../../generated/prisma/enums.js'
  *
  * | Track | Resume | Why |
  * |---|---|---|
- * | `ios_android` | `Resume_IOS` (default), `Resume_android` | Two flavours of one track. iOS is the default: it carries the SmartOut contract role, the Swift Student Challenge, and Wandr's concurrency detail. |
- * | `ai_engineer` | `Resume_AI` | Promoted from the Gesture tailoring — it leads with the agentic text-to-SQL work and carries the AI/Agentic skills line. The largest track in the corpus. |
- * | `sde` | `reusme_backend` | Backend/Systems and CS Fundamentals lines; OpenStack and idempotent-ingest framing. |
- * | `swe` | `Main resume` | The generalist: all three roles, broad language line. |
+ * | `ios_android` | `Resume_IOS` (default), `Resume_android` | Two flavours of one track. iOS is the default: it carries the SmartOut contract role, the Swift Student Challenge, and Wandr's concurrency detail. Android is selected per draft when the posting leans Android. |
+ * | `ai_engineer` | `Resume_AI` | Leads with the agentic text-to-SQL work and carries the AI/Agentic skills line. The largest track in the corpus. |
+ * | `sde` | `Resume_backend` | Backend/Systems and CS Fundamentals lines; OpenStack and idempotent-ingest framing. |
+ * | `swe` | `Resume_backend` | Same document as `sde`. The operator's generalist pitch is the backend one; `Main resume.pdf` is an iOS-flavoured variant and is deliberately not seeded — a generalist posting handed an iOS resume was the bug this mapping fixes. |
+ *
+ * `swe` and `sde` are two rows over one file: `trackKey` is single-valued, so a
+ * document serving two tracks needs a row per track. They share a `fileSha256`.
  *
  * A track has exactly one default; the second `ios_android` row is available for the
  * operator to switch to per packet without re-seeding.
@@ -73,7 +76,7 @@ export const RESUME_VERSIONS: ResumeVersionSeed[] = [
   {
     label: 'SWE — generalist',
     trackKey: 'swe',
-    filePath: `${RESUME_LIBRARY_DIR}/Main resume.pdf`,
+    filePath: `${RESUME_LIBRARY_DIR}/Resume_backend.pdf`,
     isTrackDefault: true,
   },
 ]
