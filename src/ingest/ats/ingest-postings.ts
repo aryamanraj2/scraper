@@ -201,8 +201,14 @@ async function upsertPosting(
     await db.opportunity.update({ where: { id: existing.id }, data })
     return 'updated'
   }
-  await db.opportunity.create({
-    data: { companyId, externalId: posting.externalId, ...data },
+  // The `existing` lookup above and this write are not atomic, and a board can
+  // serve the same job id more than once inside a single refresh. Upserting on the
+  // same compound key the constraint uses means a repeat updates the row instead of
+  // aborting the whole ingest run.
+  await db.opportunity.upsert({
+    where: { companyId_externalId: { companyId, externalId: posting.externalId } },
+    create: { companyId, externalId: posting.externalId, ...data },
+    update: data,
   })
   return 'created'
 }
