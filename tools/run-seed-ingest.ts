@@ -105,12 +105,22 @@ if (!seedOnly) {
     const provider = providers[vendor as keyof typeof providers]
     if (!provider) continue
 
-    const ingest = await ingestPostings(db, provider, { id: company.id, atsBoardToken: boardToken })
-    postingsTotal += ingest.created + ingest.updated + ingest.unchanged
-    console.log(
-      `  ${company.canonicalDomain.padEnd(34)} ${vendor.padEnd(11)} ${boardToken.padEnd(28)} ` +
-        `${ingest.sourceFailure ? ingest.sourceFailure.reason : `${ingest.fetched} postings`}`,
-    )
+    // One company must never end the run. A 2000-company pass is hours long and
+    // unattended; an unexpected error on company 900 previously discarded every
+    // detection after it. Report and continue.
+    try {
+      const ingest = await ingestPostings(db, provider, { id: company.id, atsBoardToken: boardToken })
+      postingsTotal += ingest.created + ingest.updated + ingest.unchanged
+      console.log(
+        `  ${company.canonicalDomain.padEnd(34)} ${vendor.padEnd(11)} ${boardToken.padEnd(28)} ` +
+          `${ingest.sourceFailure ? ingest.sourceFailure.reason : `${ingest.fetched} postings`}`,
+      )
+    } catch (error) {
+      console.log(
+        `  ${company.canonicalDomain.padEnd(34)} ${vendor.padEnd(11)} ${boardToken.padEnd(28)} ` +
+          `ERROR ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+      )
+    }
   }
 
   console.log(`\n  boards detected: ${detected}/${companies.length}; postings attached: ${postingsTotal}`)
