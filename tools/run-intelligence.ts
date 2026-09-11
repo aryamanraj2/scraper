@@ -4,6 +4,7 @@
  *
  *   npm run intel:run                    # score every company, no network
  *   npm run intel:run -- --research 20   # also research up to 20 companies (LIVE)
+ *   npm run intel:run -- --research 60 --country India   # scoped to one geography
  *   npm run intel:run -- --briefs        # queue research briefs for qualified leads
  *
  * Without `--research` this touches no network at all: it scores from rows F1
@@ -42,6 +43,15 @@ const wantBriefs = process.argv.includes('--briefs')
  * is not refreshed by a re-fetch that the window skips.
  */
 const refreshPages = process.argv.includes('--refresh-pages')
+/**
+ * Restrict research to one country. The corpus is 1,975 companies of which 1,553
+ * scored `insufficient_evidence`, and research walks them oldest-first — so without
+ * this, reaching a specific geography means paying for everything ingested before it.
+ * H5 gives India a higher per-company allowance for exactly this reason (B7: no
+ * India-native ATS exposes a public feed), and 58 of the corpus's 60 Indian companies
+ * have no detected board, so page research is the only source they have.
+ */
+const country = flag('country')
 
 const db = prisma()
 const config = env()
@@ -81,22 +91,25 @@ if (researchLimit > 0) {
   // nothing but a YC blurb, and page research is the only source they have left.
   // `detect_ats` actions are skipped here — detection belongs to `ingest:seed`,
   // which owns the two-stage path and its own rate budget.
+  const countryFilter = country ? { countries: { has: country } } : {}
   const companies = [
     ...(await db.company.findMany({
-      where: { status: 'insufficient_evidence' },
+      where: { status: 'insufficient_evidence', ...countryFilter },
       select: { id: true, canonicalDomain: true, careersUrl: true, atsSlug: true, atsBoardToken: true, countries: true },
       orderBy: { createdAt: 'asc' },
       take: researchLimit,
     })),
     ...(await db.company.findMany({
-      where: { status: { not: 'insufficient_evidence' } },
+      where: { status: { not: 'insufficient_evidence' }, ...countryFilter },
       select: { id: true, canonicalDomain: true, careersUrl: true, atsSlug: true, atsBoardToken: true, countries: true },
       orderBy: { createdAt: 'asc' },
       take: researchLimit,
     })),
   ].slice(0, researchLimit)
 
-  console.log(`\nResearching ${companies.length} companies (LIVE, through FetchPolicyGate)...`)
+  console.log(
+    `\nResearching ${companies.length} companies${country ? ` in ${country}` : ''} (LIVE, through FetchPolicyGate)...`,
+  )
   const outcomes = new Map<string, number>()
   for (const company of companies) {
     const action = await graph.nextAction(company)
