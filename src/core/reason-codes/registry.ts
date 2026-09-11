@@ -57,6 +57,17 @@ export const REASON_CODE_REGISTRY: Record<ReasonCodeValue, ReasonCodeEntry> = {
     milestone: 'F5',
     description: 'approval_hash recomputed from live rows differs from the value frozen at human approval.',
   },
+  recipient_not_owned: {
+    // The 40th code, added in F5. The enum is closed and a new value costs a
+    // migration and an owner, so F4 §4.11 was right to map gate failures onto
+    // existing codes rather than invent one. This is the case that genuinely has no
+    // analogue: Part F's F5 deliverable is "verified sends to owned inboxes ONLY",
+    // and folding that refusal into `sending_disabled` would make the single most
+    // safety-critical refusal in the milestone indistinguishable, in every counter
+    // and every audit row, from "the operator has not set the env flag yet".
+    milestone: 'F5',
+    description: 'Recipient is not on the owned-inbox allowlist, and external recipients are not enabled (F5 sends only to owned inboxes; F6 lifts it).',
+  },
   suppressed: {
     milestone: 'F5',
     description: 'A suppression matches email_hmac at contact, domain, or global scope.',

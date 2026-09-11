@@ -15,8 +15,24 @@ export const MILESTONE_ORDER = ['F0', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'] 
 
 export type Milestone = (typeof MILESTONE_ORDER)[number]
 
-/** The milestone this build has shipped. */
-export const MILESTONE_STAGE: Milestone = 'F4'
+/**
+ * The milestone this build has shipped.
+ *
+ * **Raised to 'F5' in the F5 session, and it is the single most consequential line in
+ * this repository.** It unlocks sending — but only sending, and only one factor of it:
+ *
+ *   - `SENDING_ENABLED` must still be set. `resolveSendingEnabled` needs both, and
+ *     `test/unit/stage-guard.test.ts` pins that neither alone is enough.
+ *   - The send gate's owned-inbox condition still refuses every recipient that is not
+ *     on `OWNED_INBOXES`, at every stage below F6 and at F6 unless
+ *     `SEND_EXTERNAL_RECIPIENTS_ENABLED` is also set
+ *     (`src/outreach/send/recipient-policy.ts`). Part F's F5 deliverable is "verified
+ *     sends to owned inboxes only"; F6 is "enable sending", and they are two acts.
+ *
+ * So this constant reaching F5 means the machinery is built and proven against owned
+ * inboxes. It does not mean the pilot has started.
+ */
+export const MILESTONE_STAGE: Milestone = 'F5'
 
 /** The first milestone at which external sending may be enabled at all (Part F). */
 export const SENDING_UNLOCKED_AT: Milestone = 'F5'

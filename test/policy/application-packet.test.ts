@@ -480,15 +480,42 @@ describe('nothing auto-submits (H8, irreversible in Part H)', () => {
     expect(hits).toEqual([])
   })
 
-  it('calls gate.postJson from exactly one module, and it is the Firecrawl escalation', () => {
-    // The gate's POST path exists for one vendor (F2 §4.5). If a second caller ever
-    // appears, it must be reviewed rather than discovered — a POST is how an
-    // application would be submitted.
+  it('calls gate.postJson from a reviewed allowlist of modules, and nowhere else', () => {
+    // The gate's POST path exists for named callers only. Its own comment set the
+    // rule: "If a second caller ever appears, it must be reviewed rather than
+    // discovered — a POST is how an application would be submitted."
+    //
+    // F5 is that review. The second caller is the Gmail adapter, and the assertion
+    // below is deliberately not loosened to "any file under outreach/" — each entry is
+    // one module, listed by hand, so a third caller still fails this test.
+    const ALLOWED_POST_JSON_CALLERS = [
+      // F2 §4.5 — Firecrawl's v2 scrape endpoint, the only vendor API with no GET form.
+      'intel/research/firecrawl.ts',
+      // F5 — users.messages.send. A mail send is a POST to a Google host with an
+      // OAuth bearer; it cannot reach an ATS, and the endpoint check below pins that.
+      'outreach/mail/gmail.ts',
+    ]
     const callers = sourceFiles.filter((file) => {
       if (file.endsWith(join('policy', 'fetch-policy-gate.ts'))) return false
       return /\.postJson\s*\(/.test(readFileSync(file, 'utf8'))
     })
-    expect(callers.map((f) => f.split('/src/')[1] ?? f)).toEqual(['intel/research/firecrawl.ts'])
+    expect(callers.map((f) => f.split('/src/')[1] ?? f).sort()).toEqual([...ALLOWED_POST_JSON_CALLERS].sort())
+  })
+
+  it('the mail adapter posts only to the Gmail API host', () => {
+    // The reason the allowlist entry above is safe, asserted rather than asserted-by-
+    // comment: every URL the adapter can construct is built from one base constant,
+    // and that constant is on gmail.googleapis.com.
+    const text = readFileSync(join(process.cwd(), 'src/outreach/mail/gmail.ts'), 'utf8')
+    const urls = text.match(/https?:\/\/[^'"`\s]+/g) ?? []
+    const hosts = new Set(urls.map((u) => new URL(u).host))
+    // Only the API host and the two documentation hosts cited in the comments. An ATS
+    // host appearing anywhere in this file — even in a comment — fails here.
+    expect([...hosts].sort()).toEqual([
+      'developers.google.com',
+      'gmail.googleapis.com',
+      'support.google.com',
+    ])
   })
 
   it('records a submission as a human act, never as a request this system issued', async () => {

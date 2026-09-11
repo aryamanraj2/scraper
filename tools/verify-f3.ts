@@ -173,16 +173,26 @@ const db = prisma()
     const text = readFileSync(f, 'utf8')
     return forbidden.some((p) => p.test(text))
   })
-  const postJsonCallers = files.filter(
-    (f) => !f.endsWith(join('policy', 'fetch-policy-gate.ts')) && /\.postJson\s*\(/.test(readFileSync(f, 'utf8')),
-  )
+  // A named allowlist rather than a count. F3 wrote `<= 1` because exactly one caller
+  // existed, and the intent was "a second caller must be reviewed rather than
+  // discovered" — not "there will only ever be one". F5 is that review: the mail
+  // adapter posts a message to gmail.googleapis.com and cannot reach an ATS.
+  //
+  // A count would have had to be relaxed to `<= 2`, which is the same check one notch
+  // weaker and would silently admit a third. A list does not weaken.
+  const ALLOWED_POST_JSON = ['intel/research/firecrawl.ts', 'outreach/mail/gmail.ts']
+  const postJsonCallers = files
+    .filter((f) => !f.endsWith(join('policy', 'fetch-policy-gate.ts')) && /\.postJson\s*\(/.test(readFileSync(f, 'utf8')))
+    .map((f) => f.split('/src/')[1] ?? f)
+  const unexpected = postJsonCallers.filter((f) => !ALLOWED_POST_JSON.includes(f))
   checks.push({
     name: 'Nothing auto-submits (H8)',
-    ok: hits.length === 0 && postJsonCallers.length <= 1,
+    ok: hits.length === 0 && unexpected.length === 0,
     detail:
       `${files.length} source file(s) scanned; 0 ATS submission endpoints; ` +
-      `gate.postJson called from ${postJsonCallers.length} module(s) ` +
-      `(${postJsonCallers.map((f) => f.split('/src/')[1] ?? f).join(', ') || 'none'})`,
+      `gate.postJson called from ${postJsonCallers.length} reviewed module(s) ` +
+      `(${postJsonCallers.join(', ') || 'none'})` +
+      (unexpected.length > 0 ? `; UNREVIEWED: ${unexpected.join(', ')}` : ''),
   })
 }
 

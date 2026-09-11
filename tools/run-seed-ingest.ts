@@ -91,14 +91,21 @@ if (!seedOnly) {
 
     if (!vendor || !boardToken) {
       if (postingsOnly) continue
-      const outcome = await detectAtsForCompany(db, gate, company, {
-        maxPages: 2,
-        interPageDelayMs: config.DEFAULT_HOST_RATE_DELAY_MS,
-      })
-      if (!outcome.found) continue
-      await saveDetection(db, company.id, outcome.detection, outcome.sourceUrl)
-      vendor = outcome.detection.vendor
-      boardToken = outcome.detection.boardToken
+      try {
+        const outcome = await detectAtsForCompany(db, gate, company, {
+          maxPages: 2,
+          interPageDelayMs: config.DEFAULT_HOST_RATE_DELAY_MS,
+        })
+        if (!outcome.found) continue
+        await saveDetection(db, company.id, outcome.detection, outcome.sourceUrl)
+        vendor = outcome.detection.vendor
+        boardToken = outcome.detection.boardToken
+      } catch (error) {
+        console.log(
+          `  ${company.canonicalDomain.padEnd(34)} detect ERROR ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+        )
+        continue
+      }
     }
 
     detected += 1

@@ -82,10 +82,21 @@ export async function seedHostPolicies(db: Db): Promise<{ allow: number; deny: n
     })
   }
   for (const entry of SEED_ALLOW_HOSTS) {
+    // A published rate limit travels with the entry and carries its source URL, so an
+    // override is auditable as "the vendor says this" rather than "someone chose this"
+    // (D4 step 4).
+    const data = {
+      mode: 'allow' as const,
+      origin: 'seed_static' as const,
+      includeSubdomains: entry.includeSubdomains,
+      note: entry.note,
+      rateDelayMsOverride: entry.rateDelayMsOverride ?? null,
+      sourceUrl: entry.sourceUrl ?? null,
+    }
     await db.hostPolicy.upsert({
       where: { host: entry.host },
-      create: { host: entry.host, mode: 'allow', origin: 'seed_static', includeSubdomains: entry.includeSubdomains, note: entry.note },
-      update: { mode: 'allow', origin: 'seed_static', includeSubdomains: entry.includeSubdomains, note: entry.note },
+      create: { host: entry.host, ...data },
+      update: data,
     })
   }
   return { allow: SEED_ALLOW_HOSTS.length, deny: SEED_DENY_HOSTS.length }

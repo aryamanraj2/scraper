@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
 import { seedApprovedClaims } from '../../src/apply/claims/seed-claims.js'
+import { seedCandidateProfile } from '../../src/apply/claims/seed-profile.js'
 import { composeDrafts, gateDraft } from '../../src/outreach/draft/compose.js'
 import { queueOutreachDraft, applyOutreachDraft } from '../../src/outreach/draft/queue-draft.js'
 import { approveDraft, verifyApprovalHash } from '../../src/outreach/draft/approve.js'
@@ -41,6 +42,11 @@ type WorldOpts = {
 async function world(opts: WorldOpts = {}) {
   const db = testDb()
   await seedApprovedClaims(db)
+  // D6 condition 3's row, derived from the claims just seeded. F5 made
+  // `senderIdentity` a stored property of the approval rather than an unpassed
+  // caller option, so an approval now needs a profile to freeze an identity from —
+  // see `src/outreach/draft/approve.ts`.
+  await seedCandidateProfile(db, { sendingAccount: 'aryamanj250@gmail.com' })
 
   const resume = await db.resumeVersion.create({
     data: {
@@ -448,6 +454,22 @@ describe('approval_hash is frozen and compared byte-for-byte (A7)', () => {
     expect((await verifyApprovalHash(db, draftId)).matches).toBe(false)
   })
 
+  it('breaks when the resume is RE-HOSTED, though the file is byte-identical', async () => {
+    // The defect F5 measured. The F5 handover predicted that hosting the resumes would
+    // invalidate every approval "which is the mechanism working" — it did not, because
+    // A7's field list binds the row id and the FILE hash, and re-hosting changes
+    // neither. A7 was written for an attachment; H3 makes this system link, and for a
+    // link the URL is the payload. A valid approval over a dead link is not an
+    // approval of anything the recipient can use.
+    const { db, draftId } = await approvedDraft()
+    const draft = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { resumeVersionId: true } })
+    await db.resumeVersion.update({
+      where: { id: draft.resumeVersionId! },
+      data: { linkUrl: 'https://elsewhere.example/backend.pdf' },
+    })
+    expect((await verifyApprovalHash(db, draftId)).matches).toBe(false)
+  })
+
   it('breaks when the recipient is swapped', async () => {
     const { db, draftId } = await approvedDraft()
     const company = await db.company.findFirstOrThrow({ select: { id: true } })
@@ -755,14 +777,21 @@ describe('legal_policy_mismatch gates the AMENDED path only (§10.3, B4)', () =>
   })
 })
 
-describe('F4 sends nothing', () => {
-  it('sending stays disabled even with the env flag set', () => {
-    const decision = resolveSendingEnabled({ envFlag: true })
+describe('composition sends nothing', () => {
+  it('refuses to send with the env flag unset, at any stage', () => {
+    // This used to assert that the STAGE refused even with the flag set. F5 raised the
+    // stage, so the assertion moved to the factor that did not change: an operator has
+    // to say yes too. The stage half is pinned in `test/unit/stage-guard.test.ts`, and
+    // the recipient half — which is what actually keeps F5 off real people — in
+    // `test/policy/owned-inbox.test.ts`.
+    const decision = resolveSendingEnabled({ envFlag: false })
     expect(decision.enabled).toBe(false)
     if (!decision.enabled) expect(decision.reason).toBe('sending_disabled')
   })
 
-  it('an approved draft has no SendAttempt and no way to make one', async () => {
+  it('composing a draft creates no SendAttempt', async () => {
+    // Composition and transmission are separate, and the composer has no path to the
+    // second: it holds no `MailProvider` and cannot construct one.
     const { db } = await world()
     await composeDrafts(db)
     expect(await db.sendAttempt.count()).toBe(0)

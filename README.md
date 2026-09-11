@@ -15,7 +15,8 @@ on your behalf.
 | `docs/F2-HANDOVER.md` | What F1 built, every deviation, and the F2 task. |
 | `docs/F3-HANDOVER.md` | What F2 built, every deviation, and the F3 task. |
 | `docs/F4-HANDOVER.md` | What F3 built, every deviation, and the operator's volume-outreach scope amendment (§10), which is still binding. |
-| `docs/F5-HANDOVER.md` | What F4 built, F4's twelve deviations, the Tier A yield number, and the F5 task. **Point a new session at this.** |
+| `docs/F5-HANDOVER.md` | What F4 built, F4's twelve deviations, the Tier A yield number, and the F5 task. |
+| `docs/F6-HANDOVER.md` | What F5 built, F5's deviations, and the F6 task — the controlled pilot. **Point a new session at this.** |
 | `docs/handoff-llm-gateway.md` | How the LLM role works: the app queues judgment tasks, a Claude Code session fulfils them. Built in F2; carries the message-composition kind as of F4. |
 
 Two documents govern this repo:
@@ -28,7 +29,7 @@ Two documents govern this repo:
   Defect ids (A1–A12) and verification ids (B1–B7) referenced in code comments
   point at it.
 
-## Status: F4 complete — applications, and a drafting sandbox that sends nothing
+## Status: F5 complete — send readiness, to owned inboxes only
 
 F0 made the safeguards structural. F1 added ingestion: a yc-oss seed loader, domain
 canonicalization, ATS detection with Lever slug resolution, and the three required
@@ -40,8 +41,7 @@ a flag, ATS job-count deltas, and the `HandoffLlmGateway`.
 
 **F3 is the payload.** It generates `ApplicationPacket`s — a track-tailored resume, the
 employer's own application URL, and prefilled answers drawn only from `ApprovedClaim` —
-plus a Next.js dashboard with the review queues and the evidence viewer. **37 packets
-across 17 companies** today.
+plus a Next.js dashboard with the review queues and the evidence viewer.
 
 **F4 adds the outreach half.** A Tier A contact curator reads recruiting aliases off
 employer careers pages through the gate — never a founder, never an inferred address —
@@ -51,9 +51,21 @@ the company cites an `Evidence` row and every sentence about you cites an
 Quality Gate with versioned checks runs before a human ever sees a draft, and approval
 freezes an `approval_hash` over A7's exact field list.
 
-**The system prepares applications; it never submits them** (H8). **It composes
-messages; it sends nothing** — sending needs two independent factors and this build has
-neither.
+**F5 makes sending possible, and keeps it off real people.** The Gmail adapter runs on
+`gmail.modify` through `FetchPolicyGate` like every other request; A9's deterministic
+`Message-ID` is derived from the idempotency key and persisted **before** the API call,
+so a crash mid-send reconciles with an `rfc822msgid:` search instead of sending twice.
+D6's send gate is one choke point evaluating eleven conditions in one transaction.
+Bounces classify hard or soft, and **a soft bounce stops the conversation without
+permanently suppressing anyone** (A12).
+
+**`MILESTONE_STAGE` now reads `F5`, and that unlocks less than it sounds like.**
+Sending still needs `SENDING_ENABLED` as a second factor, and the send gate refuses
+every recipient that is not on `OWNED_INBOXES`. Lifting that needs the F6 stage **and**
+`SEND_EXTERNAL_RECIPIENTS_ENABLED` — two acts, neither automatic. Part F's F5
+deliverable is "verified sends to owned inboxes only"; F6 is "enable sending".
+
+**The system prepares applications; it never submits them** (H8).
 
 ```bash
 npm run seed:operator     # your resumes and approved claims
@@ -63,6 +75,11 @@ npm run drafts:run                       # compose drafts — no network
 npm run drafts:run -- --queue            # queue the judgment sentences
 npm run llm:next -- --kind outreach_draft   # drain them from a Claude Code session
 npm run drafts:run -- --drain            # merge, then run the Quality Gate
+npm run gmail:auth                       # once: OAuth consent, refresh token enveloped
+npm run send:test -- --to you+f5a@gmail.com   # LIVE: owned inbox only, checks A9 + SPF/DKIM
+npm run send:run -- --list               # what the gate says about each approved draft
+npm run send:run -- --dry --id <draftId> # evaluate the gate, send nothing
+npm run inbox:sync                       # LIVE: classify replies and bounces
 npm run dev               # the dashboard, http://localhost:3000
 ```
 
@@ -72,6 +89,16 @@ dedicated recruiting alias**. All four hits are general `info@`/`hello@` inboxes
 is the number that decides whether a paid lookup provider is worth buying, and it says
 employer pages alone will not reach the operator's 1,000–2,000 target. See
 `docs/F5-HANDOVER.md` §2.2.
+
+| F5 exit criterion | Where it is proven |
+|---|---|
+| Crash mid-send issues no second send (A9) | `test/policy/send-gate.test.ts`; `npm run verify:f5` |
+| Owned inboxes only, and lifting it needs two acts | `test/policy/owned-inbox.test.ts`; `npm run verify:f5` |
+| `approval_hash` mismatch aborts the send | `test/policy/send-gate.test.ts` |
+| A soft bounce never permanently suppresses (A12) | `test/policy/outcome-ingestion.test.ts`; `npm run verify:f5` |
+| Same human never emailed twice in a cycle | `test/integration/send-attempt-indexes.test.ts` |
+| First-party counters only; no reputation source | `npm run verify:f5` |
+| All 15 F5 reason codes reachable | `test/policy/reason-code-coverage.test.ts` |
 
 | F4 exit criterion | Where it is proven |
 |---|---|
@@ -150,6 +177,13 @@ security add-generic-password -s outreach-intelligence -a kek \
 | `npm run verify:f2` | The seven F2 exit criteria, individually reported |
 | `npm run verify:f3` | The eleven F3 exit criteria, individually reported |
 | `npm run verify:f4` | The thirteen F4 exit criteria, individually reported |
+| `npm run verify:f5` | The fifteen F5 exit criteria, individually reported |
+| `npm run gmail:auth` | **Live.** One-time OAuth consent; stores the refresh token enveloped |
+| `npm run send:test` | **Live.** Sends a diagnostic to an owned inbox only, at every stage |
+| `npm run send:run -- --list` | What D6's gate says about every approved draft. No network |
+| `npm run send:run -- --id <id>` | **Live.** Transmit one approved draft. There is deliberately no `--all` |
+| `npm run send:run -- --reconcile` | A9 recovery: reconcile in-flight attempts. Never sends |
+| `npm run inbox:sync` | **Live.** Read-only: classify replies and bounces, write outcomes |
 | `npm run contacts:curate` | **Live.** Read employer pages for recruiting aliases. `-- --all --max-pages 5` |
 | `npm run contacts:curate -- --report` | The Tier A yield report only. No network |
 | `npm run drafts:run` | Compose outreach drafts from stored rows. No network |
@@ -185,14 +219,16 @@ receive a `FetchPolicyGate`, never a client. Three layers enforce this: ESLint, 
 AST scanner in `tools/check-no-raw-http.ts` (part of `npm test`), and a
 transport-level test using undici's `MockAgent` with net connect disabled.
 
-**Sending needs two independent factors.** `SENDING_ENABLED=true` alone does
-nothing: `src/core/config/stage.ts` carries a `MILESTONE_STAGE` constant that only
-a reviewed commit changes, and sending stays refused with `sending_disabled` until
-it reaches `F5`.
+**Sending needs two independent factors, and reaching a real person needs two more.**
+`SENDING_ENABLED=true` alone does nothing: `src/core/config/stage.ts` carries a
+`MILESTONE_STAGE` constant that only a reviewed commit changes. Both are now satisfied
+— and the send gate still refuses every recipient that is not on `OWNED_INBOXES`,
+until the stage reaches F6 **and** `SEND_EXTERNAL_RECIPIENTS_ENABLED` is set.
+`src/outreach/send/recipient-policy.ts`.
 
-**Only four commands touch a live source**, and none runs in `npm test`:
-`ingest:seed`, `fixtures:record`, `intel:run -- --research N`, and
-`contacts:curate`. All four go through `FetchPolicyGate`, so a fixture can never
+**Eight commands touch a live source**, and none runs in `npm test`:
+`ingest:seed`, `fixtures:record`, `intel:run -- --research N`, `contacts:curate`,
+and F5's four — `gmail:auth`, `send:test`, `send:run`, `inbox:sync`. All four go through `FetchPolicyGate`, so a fixture can never
 describe a capability the pipeline does not have. Everything else replays
 `test/fixtures/` through undici's `MockAgent` with net connect disabled.
 `packets:run`, `drafts:run` and the dashboard touch nothing.
@@ -234,6 +270,8 @@ src/intel/signal-graph.ts     D4 source precedence as a hard floor
 src/apply/                    ApprovedClaim library, packet generation, the evidence viewer
 src/outreach/contacts/        the Tier A curator, the executive filter, the yield report
 src/outreach/draft/           the composer, the citation choke point, Quality Gate, approval_hash
+src/outreach/mail/            the Gmail adapter, the deterministic Message-ID, the MIME builder
+src/outreach/send/            D6's send gate, A9's idempotent send, caps, breaker, outcome ingestion
 test/fixtures/                real responses, captured through the gate
 tools/                        AST guard, verifiers, seeders, fixture recorder
 ```

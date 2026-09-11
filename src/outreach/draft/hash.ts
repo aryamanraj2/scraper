@@ -39,6 +39,34 @@ import type { DraftComposition } from './message.js'
  * something the human never saw. The per-sentence citation is the thing §10.1 says
  * not to weaken, so it is inside the hash.
  *
+ * ## What F5 adds, and the defect that required it
+ *
+ * `resumeLinkUrl` — the URL the recipient actually clicks.
+ *
+ * The F5 handover §8.5 stated that hosting the resumes *"will change every approved
+ * draft's `approval_hash`, which is the mechanism working"*. It was measured, and it
+ * is false. After `seed:operator` re-ran with real hosted URLs, the one approved draft
+ * in the live database still verified as `{ matches: true }` — over a body containing
+ * `Resume: file:///Users/.../Resume_AI.pdf`.
+ *
+ * A7 was doing exactly what A7 says. Its field list binds `resume_version_id` and
+ * `attachment_sha256[]`, and neither moved: the row id is the same row and the FILE is
+ * byte-identical — only where it is published changed. `bodyText` and `composition`
+ * were frozen at composition time and did not move either.
+ *
+ * The gap is that A7 was written for an **attachment**, where the document's content
+ * hash is the thing the recipient receives. H3 makes this system link rather than
+ * attach (B5: a new sending domain plus an attachment is the worst deliverability
+ * combination available), and for a link the URL *is* the payload — a correct hash over
+ * a dead link is a valid approval for a message that does not work.
+ *
+ * So the URL is hashed too. Re-hosting a resume now invalidates every approval that
+ * linked it, which is what §8.5 claimed and now describes.
+ *
+ * Note what this does NOT fix: the stored `bodyText` still contains whatever link was
+ * rendered at composition. Invalidating the approval sends the draft back to a human,
+ * and the correct repair is re-composition, not re-approval.
+ *
  * ## Why it is never recomputed from live rows at send time
  *
  * A7 again: recomputing from live data at send time "always matches and proves
@@ -54,6 +82,8 @@ export type ApprovalHashInput = {
   resumeVersionId: string | null
   /** A7's `attachment_sha256[]`: the FILE, so an edit in place invalidates approval. */
   resumeSha256: string | null
+  /** F5: the URL the recipient clicks. For a LINKED resume this is the payload. */
+  resumeLinkUrl: string | null
   citedEvidenceIds: string[]
   approvedClaimIds: string[]
   senderIdentity: string | null
@@ -70,6 +100,7 @@ export function approvalHashInput(input: ApprovalHashInput): Record<string, unkn
     recipientEmailNormalized: input.recipientEmailNormalized,
     resumeVersionId: input.resumeVersionId,
     resumeSha256: input.resumeSha256,
+    resumeLinkUrl: input.resumeLinkUrl,
     senderIdentity: input.senderIdentity,
     promptVersion: input.promptVersion,
     outreachCase: input.outreachCase,

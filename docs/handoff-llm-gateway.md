@@ -358,3 +358,52 @@ fulfilled with a message citing two real `Evidence` rows (the employer's own car
 page and their own open posting) and three real `ApprovedClaim` rows, merged, gated and
 approved with a frozen `approval_hash`. The other three sit at `gate_failed`, correctly,
 waiting for their sentences.
+
+---
+
+## As built (F5)
+
+F5 is the first milestone that **declined** to use the gateway for something the table
+above assigns to it, and the reason is worth recording because it is a rule rather than
+a preference.
+
+### Reply classification is deterministic, not a task kind
+
+The "Where this gets used" table says *"F5 | Reply classification"*. It is not.
+`src/outreach/send/classify-outcome.ts` is a pure function over the text of a received
+message, and no `LlmTask` is written.
+
+Three reasons, in order of weight:
+
+1. **It decides whether to permanently suppress a human being.** An opt-out writes an
+   HMAC-backed `Suppression` row that A10 deliberately makes outlive the `Contact` being
+   deleted — it is effectively irreversible. "Scoring, normalization, dedup, HMAC, state
+   transitions, the send gate and every ATS/JSON parse stay deterministic regardless" is
+   the rule this file already states; a decision that writes an irreversible record about
+   a person belongs on that list, and the send gate reads the result.
+2. **H10 would invert here.** Everywhere else, an undrained backlog degrades quality: a
+   packet is usable with two answers blank, a draft is complete as a record and merely
+   fails the gate. An unclassified opt-out is different — the pipeline would keep the
+   lead live until a session was opened, and the failure mode is *writing again to
+   someone who asked us not to*. That is the worst outcome available to this system, and
+   it must not wait on a human opening a terminal.
+3. **The patterns can be pinned in both directions**, the way F2 §4.12's injection
+   patterns are. `test/unit/classify-outcome.test.ts` fixes six opt-out phrasings, four
+   redirects, three auto-replies and three genuine replies, plus the RFC 3834 header that
+   must beat the text. A model's answer to those is not replayable and a regression in it
+   is invisible.
+
+The classifier deliberately favours **recall over precision** on opt-out: a missed
+opt-out is unrecoverable, a false positive costs one lead.
+
+### What the gateway is still the right tool for here
+
+`handover.md` §5's Inbox/Outcome Worker has two jobs and only the first is taken above:
+*"classifies replies, records outcomes, blocks follow-ups, updates suppressions, **and
+creates a reply draft for the user**."* Drafting the operator's answer to a real reply is
+judgment over quoted evidence with a human approving the result — exactly the shape this
+gateway exists for, and exactly the shape `outreach_draft@1` already has. It is F6's, and
+it needs no new mechanism: a task kind, both citation arrays, and the same CLI.
+
+22 tasks are still pending — 19 `research_brief` from F2 and 3 `outreach_draft` from F4.
+Drain them with `npm run llm:next`.

@@ -17,6 +17,15 @@ export type SeedHostEntry = {
   host: string
   includeSubdomains: boolean
   note: string
+  /**
+   * D4 step 4: "a published rate limit or crawl-delay always wins over our default".
+   *
+   * Set only where a vendor publishes a figure we can cite. It is an override in both
+   * directions — a published limit slower than our default would slow us down — and
+   * every use records the source URL it came from on the `HostPolicy` row.
+   */
+  rateDelayMsOverride?: number
+  sourceUrl?: string
 }
 
 /**
@@ -54,6 +63,41 @@ export const SEED_ALLOW_HOSTS: SeedHostEntry[] = [
   { host: 'yc-oss.github.io', includeSubdomains: false, note: 'yc-oss daily company index. H7: seed index only — re-verify every citable fact from the company site.' },
   { host: 'raw.githubusercontent.com', includeSubdomains: false, note: 'yc-oss raw JSON payloads.' },
   { host: 'api.firecrawl.dev', includeSubdomains: false, note: 'D4 tier 3 escalation: POST /v2/scrape, Bearer auth (B6a). Reached only through FetchPolicyGate.postJson, and only when FIRECRAWL_API_KEY is set.' },
+
+  // --- F5: the mail transport -----------------------------------------------
+  //
+  // These are not research sources and nothing crawls them: they are the operator's
+  // OWN mailbox, reached with the operator's own OAuth credentials. They are on the
+  // allowlist for the same reason `api.firecrawl.dev` is — `FetchPolicyGate` is the
+  // only path to the network, so an authenticated provider API goes through it like
+  // everything else, and host policy, terms, robots, rate and budget all still run.
+  //
+  // robots.txt: both hosts answer 404, which F1 §4.9 defines as "no rules published" —
+  // permission ONLY for a host with an explicit allow entry, which these have.
+  // Verified 2026-09-11.
+  //
+  // Budget: the mail path declares `cost: 0`, which `checkBudget` short-circuits
+  // before reading a row. A research cap must never abort an approved message.
+  {
+    host: 'gmail.googleapis.com',
+    includeSubdomains: false,
+    // Published: 6,000 quota units per minute per user (= 100/second), and
+    // messages.send costs 100 units — so one send per second is the vendor's own
+    // ceiling. 1,500 ms sits under it with margin. Our 5,000 ms default would refuse
+    // the reconciliation search that has to follow a send (A9 step 2) with
+    // `rate_limited`, which is the gate stopping the safety mechanism rather than the
+    // risk.
+    rateDelayMsOverride: 1_500,
+    sourceUrl: 'https://developers.google.com/workspace/gmail/api/reference/quota',
+    note: 'F5 mail transport: users.messages.send / list / get on the operator\'s own mailbox, gmail.modify scope. Rate override cites the published 6,000 units/min/user limit.',
+  },
+  {
+    host: 'oauth2.googleapis.com',
+    includeSubdomains: false,
+    rateDelayMsOverride: 1_000,
+    sourceUrl: 'https://developers.google.com/identity/protocols/oauth2/native-app',
+    note: 'F5: the OAuth 2.0 token endpoint. POST form-encoded only, through FetchPolicyGate.postForm, which audits no part of the body.',
+  },
 ]
 
 /** Lowercased host with any port and trailing dot removed. */

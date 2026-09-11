@@ -4,9 +4,9 @@ import type { ReasonCodeValue } from '../reason-codes/registry.js'
 import { normalizeHost } from './host-lists.js'
 import { resolveHostPolicy } from './host-policy.js'
 import { checkRobots } from './robots.js'
-import { checkBudget, recordSpend } from './budget.js'
+import { checkBudget, recordSpend, type BudgetSpend } from './budget.js'
 import { HostRateLimiter, effectiveDelayMs } from './rate-limit.js'
-import { rawGet, rawPostJson, type RawResponse } from './http/raw-client.js'
+import { rawGet, rawPostForm, rawPostJson, type RawResponse } from './http/raw-client.js'
 
 export type PreflightAllow = { allowed: true; rateDelayMs: number }
 export type PreflightRefusal = {
@@ -21,15 +21,27 @@ export type PreflightResult = PreflightAllow | PreflightRefusal
 export type GateContext = {
   /** Attributes spend and budget headroom. Null for global-budget-only fetches. */
   companyId?: string | null
-  /** Credits this request consumes against the research budget. */
+  /**
+   * Credits this request consumes against the research budget.
+   *
+   * Defaults to 1. **Zero is meaningful and is not the same as the default**: a
+   * zero-cost request is never refused by the budget step and never charged. That is
+   * how the mail transport passes through this gate — it is here because
+   * `FetchPolicyGate` is the only path to the network, not because it consumes a
+   * research allowance, and a research cap must never be able to abort an approved
+   * message (F5 §4.3).
+   */
   cost?: number
   /**
    * The part of `cost` that consumes a PAID vendor allowance — Firecrawl credits,
    * today. Defaults to 0, which is correct for every free tier-2 fetch. Counted
-   * alongside `cost` rather than instead of it: one ceiling, two counters, so
-   * "cap zero -> all research no-ops" still covers the free half (F2 §4.7).
+   * alongside `cost` rather than instead of it: `creditsCap` still bounds every unit,
+   * so "cap zero -> all research no-ops" still covers the free half (F2 §4.7), while
+   * `vendorCreditsCap` bounds the part that is money (F5 §4.3).
    */
   vendorCost?: number
+  /** Direct currency spend, for a per-lookup billed provider. Bounded by `billedUsdCap`. */
+  billedUsd?: number
   /**
    * Response byte ceiling for this request. The default suits research pages;
    * a structured feed raises it deliberately, at the call site, so nothing is
@@ -37,6 +49,21 @@ export type GateContext = {
    * see raw-client.ts.
    */
   maxBytes?: number
+  /**
+   * Extra request headers. The only current use is an `Authorization` bearer on an
+   * authenticated vendor or provider API; the value never reaches an audit row,
+   * because redaction runs at the sink and the gate logs no header at all.
+   */
+  headers?: Record<string, string>
+}
+
+/** The three-axis spend a `GateContext` declares, in `checkBudget`'s shape. */
+function spendOf(ctx: GateContext): BudgetSpend {
+  return {
+    credits: ctx.cost ?? 1,
+    vendorCredits: ctx.vendorCost ?? 0,
+    billedUsd: ctx.billedUsd ?? 0,
+  }
 }
 
 export type FetchPolicyGateOptions = {
@@ -150,7 +177,7 @@ export class FetchPolicyGate {
     const budget = await checkBudget(
       this.db,
       ctx.companyId ?? null,
-      ctx.cost ?? 1,
+      spendOf(ctx),
       this.opts.now?.() ?? new Date(),
     )
     if (!budget.allowed) {
@@ -180,8 +207,9 @@ export class FetchPolicyGate {
     const response = await rawGet(url, {
       userAgent: this.opts.userAgent,
       ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
+      ...(ctx.headers === undefined ? {} : { headers: ctx.headers }),
     })
-    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1, 0, this.opts.now?.() ?? new Date(), ctx.vendorCost ?? 0)
+    await recordSpend(this.db, ctx.companyId ?? null, spendOf(ctx), this.opts.now?.() ?? new Date())
 
     await writeAudit(this.db, {
       actorType: 'system',
@@ -230,7 +258,7 @@ export class FetchPolicyGate {
       ...(ctx.headers === undefined ? {} : { headers: ctx.headers }),
       ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
     })
-    await recordSpend(this.db, ctx.companyId ?? null, ctx.cost ?? 1, 0, this.opts.now?.() ?? new Date(), ctx.vendorCost ?? 0)
+    await recordSpend(this.db, ctx.companyId ?? null, spendOf(ctx), this.opts.now?.() ?? new Date())
 
     const redacted = new Set(ctx.redactedBodyKeys ?? [])
     const safeBody =
@@ -253,6 +281,62 @@ export class FetchPolicyGate {
         bytes: response.body.length,
         truncated: response.truncated,
         ...(safeBody === undefined ? {} : { body: safeBody }),
+      },
+    })
+    return { ok: true, response }
+  }
+
+  /**
+   * The same preflight, for a form-encoded POST — an OAuth 2.0 token endpoint (F5).
+   *
+   * RFC 6749 requires `application/x-www-form-urlencoded` for a token request, so
+   * this could not be `postJson` with a different header. It is the third and, by
+   * intent, last narrow method on this gate: one verb, one encoding, no general
+   * request builder. Host policy, terms, robots, rate policy and the budget run
+   * exactly as for a GET, because what they protect is the host.
+   *
+   * **No part of the body is ever audited.** `postJson` takes `redactedBodyKeys` and
+   * logs the rest, which suits a vendor payload whose non-secret fields are worth
+   * seeing. Every field of a token request is either a credential
+   * (`client_secret`, `refresh_token`, `code`) or a constant, so the correct
+   * allowlist is empty and an opt-out list would be one forgotten key away from
+   * writing a refresh token into `audit_log`. A5: no plaintext credential in the
+   * database, and none in a log line.
+   */
+  async postForm(
+    url: string,
+    form: Record<string, string>,
+    ctx: GateContext = {},
+  ): Promise<{ ok: true; response: RawResponse } | { ok: false; reason: PreflightRefusal['reason'] }> {
+    const pre = await this.check(url, ctx)
+    if (!pre.allowed) return { ok: false, reason: pre.reason }
+
+    const host = normalizeHost(new URL(url).host)
+    this.limiter.record(host)
+    const response = await rawPostForm(url, {
+      userAgent: this.opts.userAgent,
+      form,
+      ...(ctx.headers === undefined ? {} : { headers: ctx.headers }),
+      ...(ctx.maxBytes === undefined ? {} : { maxBytes: ctx.maxBytes }),
+    })
+    await recordSpend(this.db, ctx.companyId ?? null, spendOf(ctx), this.opts.now?.() ?? new Date())
+
+    await writeAudit(this.db, {
+      actorType: 'system',
+      actorId: 'fetch-policy-gate',
+      action: 'fetch.performed',
+      subjectType: 'Url',
+      subjectId: url,
+      metadata: {
+        host,
+        method: 'POST',
+        encoding: 'form',
+        statusCode: response.statusCode,
+        bytes: response.body.length,
+        truncated: response.truncated,
+        // Deliberately no body, and deliberately not even the key names: the key
+        // names of a token request are a fixed, public set, so printing them buys
+        // nothing and normalises logging near a credential.
       },
     })
     return { ok: true, response }

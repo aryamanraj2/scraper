@@ -134,9 +134,21 @@ export type InboundMessage = {
  * needs, and a send-only scope cannot perform this search at all.
  */
 export interface MailProvider {
-  send(m: OutboundMessage, idempotencyKey: string): Promise<{ providerMessageId: string }>
-  findByMessageId(messageId: string): Promise<{ providerMessageId: string } | null>
+  send(m: OutboundMessage, idempotencyKey: string): Promise<ProviderMessageRef>
+  findByMessageId(messageId: string): Promise<ProviderMessageRef | null>
   listReplies(threadIds: string[]): Promise<InboundMessage[]>
+}
+
+/**
+ * What the provider knows a message by.
+ *
+ * `threadId` is carried alongside the message id because reply ingestion needs it and
+ * because A9's reconciliation is the one chance to learn it for a send whose response
+ * was lost. It is optional so a provider without threading still satisfies the seam.
+ */
+export type ProviderMessageRef = {
+  providerMessageId: string
+  threadId?: string | undefined
 }
 
 /**

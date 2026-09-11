@@ -47,8 +47,13 @@ export type RawRequestOptions = {
 }
 
 export type RawPostOptions = RawRequestOptions & {
-  /** Serialized as JSON. The only body shape this client will send. */
+  /** Serialized as JSON. One of exactly two body shapes this client will send. */
   json: unknown
+}
+
+export type RawFormPostOptions = RawRequestOptions & {
+  /** Serialized as `application/x-www-form-urlencoded` — an OAuth token request. */
+  form: Record<string, string>
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -95,6 +100,42 @@ export async function rawPostJson(url: string, opts: RawPostOptions): Promise<Ra
       ...opts.headers,
     },
     body: JSON.stringify(opts.json),
+    headersTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    bodyTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  })
+  return await collect(res, url, opts.maxBytes)
+}
+
+/**
+ * A form-encoded POST, for an OAuth 2.0 token endpoint.
+ *
+ * Added in F5. RFC 6749 §4.1.3 and §6 both require the token request body to be
+ * `application/x-www-form-urlencoded`; Google's token endpoint accepts nothing else.
+ * `rawPostJson` cannot be reused by changing a header, because the body itself is a
+ * different encoding — so this is a third narrow method rather than a general
+ * request builder, which is the shape §4.5 of the F3 handover argued for when the
+ * JSON POST was added.
+ *
+ * Everything else is identical to `rawPostJson`: same preflight upstream, same size
+ * ceiling, same timeouts, and **no redirect following**, because replaying a body
+ * carrying a client secret against a host the preflight has not seen is not something
+ * this system should be able to do.
+ *
+ * The caller's parameters — which include `client_secret` and `refresh_token` — are
+ * serialized here and never returned, and `FetchPolicyGate.postForm` writes no body
+ * into its audit row at all.
+ */
+export async function rawPostForm(url: string, opts: RawFormPostOptions): Promise<RawResponse> {
+  const body = new URLSearchParams(opts.form).toString()
+  const res = await request(url, {
+    method: 'POST',
+    headers: {
+      'user-agent': opts.userAgent,
+      accept: 'application/json',
+      'content-type': 'application/x-www-form-urlencoded',
+      ...opts.headers,
+    },
+    body,
     headersTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     bodyTimeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   })

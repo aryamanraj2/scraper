@@ -20,17 +20,33 @@ afterAll(async () => closeTestDb())
 
 const PERIOD = currentPeriodMonth()
 
-async function envelopes(cap: { global: number; company: number }) {
+async function envelopes(cap: {
+  global: number
+  company: number
+  globalVendor?: number
+  billedUsd?: number
+}) {
   const db = testDb()
   const company = await db.company.create({
     data: { canonicalDomain: 'spend.example', displayName: 'Spend Co', countries: [], locations: [], tags: [] },
     select: { id: true },
   })
   await db.researchBudget.create({
-    data: { companyId: null, periodMonth: PERIOD, creditsCap: cap.global, billedUsdCap: 0 },
+    data: {
+      companyId: null,
+      periodMonth: PERIOD,
+      creditsCap: cap.global,
+      vendorCreditsCap: cap.globalVendor ?? 0,
+      billedUsdCap: cap.billedUsd ?? 0,
+    },
   })
   await db.researchBudget.create({
-    data: { companyId: company.id, periodMonth: PERIOD, creditsCap: cap.company, billedUsdCap: 0 },
+    data: {
+      companyId: company.id,
+      periodMonth: PERIOD,
+      creditsCap: cap.company,
+      billedUsdCap: cap.billedUsd ?? 0,
+    },
   })
   return { db, companyId: company.id }
 }
@@ -90,9 +106,9 @@ describe('the vendor-credit split (F2 §4.7)', () => {
   it('counts paid credits alongside the unified counter, not instead of it', async () => {
     const { db, companyId } = await envelopes({ global: 1000, company: 20 })
     // A free static fetch.
-    await recordSpend(db, companyId, 1, 0, new Date(), 0)
+    await recordSpend(db, companyId, { credits: 1, vendorCredits: 0 })
     // A Firecrawl scrape: one research unit, and one unit of a paid allowance.
-    await recordSpend(db, companyId, 1, 0, new Date(), 1)
+    await recordSpend(db, companyId, { credits: 1, vendorCredits: 1 })
 
     const global = await globalRow(db)
     expect(global.creditsSpent).toBe(2)
@@ -103,12 +119,88 @@ describe('the vendor-credit split (F2 §4.7)', () => {
     expect(company.vendorCreditsSpent).toBe(1)
   })
 
-  it('keeps one ceiling, so a zero cap still no-ops the free tier too', async () => {
+  it('keeps creditsCap over everything, so a zero cap still no-ops the free tier too', async () => {
     // Part G's proving test is "cap zero -> all research no-ops with
-    // budget_exhausted". That only holds while the free half is metered by the same
-    // counter the cap reads, which is why vendorCreditsSpent is not a second cap.
+    // budget_exhausted". F5 added a second ceiling for the PAID subset, and this is
+    // the property that had to survive it: `creditsCap` still counts every unit, free
+    // or paid, so a zero cap still stops the whole research path.
     const { db, companyId } = await envelopes({ global: 0, company: 0 })
     const verdict = await checkBudget(db, companyId, 1)
     expect(verdict.allowed).toBe(false)
+  })
+})
+
+/**
+ * F5 §4.3 — the split the F2 handover asked for, F3 half-did, and a live run proved
+ * necessary.
+ *
+ * A 1,975-company ingest spent the whole 1,000-credit global envelope — sized to
+ * Firecrawl's free tier — on free static fetches in about an hour, then returned
+ * `budget_exhausted` for fifty minutes. One number bounding two unlike things bounded
+ * neither honestly.
+ */
+describe('the paid subset has its own ceiling (F5 §4.3)', () => {
+  it('refuses a vendor spend that exceeds the vendor cap, while free fetches continue', async () => {
+    const { db, companyId } = await envelopes({ global: 10_000, company: 10_000, globalVendor: 1 })
+
+    // One paid credit fits.
+    expect((await checkBudget(db, companyId, { credits: 1, vendorCredits: 1 })).allowed).toBe(true)
+    await recordSpend(db, companyId, { credits: 1, vendorCredits: 1 })
+
+    // A second does not — the paid allowance is spent.
+    const paid = await checkBudget(db, companyId, { credits: 1, vendorCredits: 1 })
+    expect(paid.allowed).toBe(false)
+    if (paid.allowed) throw new Error('unreachable')
+    expect(paid.scope).toBe('global_vendor')
+
+    // ...and this is the whole point: the free path is unaffected.
+    expect((await checkBudget(db, companyId, { credits: 1 })).allowed).toBe(true)
+  })
+
+  it('reads the vendor cap from the global envelope only', async () => {
+    // A paid monthly allowance is a global resource. The per-company row keeps
+    // vendorCreditsSpent for attribution and is never a second paid ceiling.
+    const { db, companyId } = await envelopes({ global: 10_000, company: 10_000, globalVendor: 5 })
+    expect((await checkBudget(db, companyId, { credits: 1, vendorCredits: 3 })).allowed).toBe(true)
+  })
+
+  it('enforces billedUsdCap, which was decorative before F5', async () => {
+    const { db, companyId } = await envelopes({ global: 10_000, company: 10_000, billedUsd: 0.5 })
+    expect((await checkBudget(db, companyId, { credits: 0, billedUsd: 0.25 })).allowed).toBe(true)
+    const over = await checkBudget(db, companyId, { credits: 0, billedUsd: 0.75 })
+    expect(over.allowed).toBe(false)
+    if (over.allowed) throw new Error('unreachable')
+    expect(over.scope).toBe('billed_usd')
+  })
+
+  it('a zero cap on every axis still refuses a one-credit fetch', async () => {
+    const { db, companyId } = await envelopes({ global: 0, company: 0, globalVendor: 0, billedUsd: 0 })
+    expect((await checkBudget(db, companyId, { credits: 1 })).allowed).toBe(false)
+  })
+})
+
+/**
+ * The property that keeps a research cap from aborting an approved message.
+ *
+ * The mail transport goes through `FetchPolicyGate` because that is the only path to
+ * the network, not because it consumes a research allowance. If an exhausted envelope
+ * could refuse it, a human approval would be overridden by accounting — and the
+ * refusal would carry `budget_exhausted`, which is not an F5 reason code and is not
+ * one of D6's nine conditions.
+ */
+describe('a zero-cost request is outside the budget entirely', () => {
+  it('is allowed even when every envelope is exhausted', async () => {
+    const { db, companyId } = await envelopes({ global: 0, company: 0, globalVendor: 0, billedUsd: 0 })
+    await recordSpend(db, companyId, { credits: 0 })
+    expect((await checkBudget(db, companyId, { credits: 0 })).allowed).toBe(true)
+    expect((await checkBudget(db, null, { credits: 0 })).allowed).toBe(true)
+  })
+
+  it('is not charged, so it leaves no trace on any counter', async () => {
+    const { db, companyId } = await envelopes({ global: 100, company: 100 })
+    await recordSpend(db, companyId, { credits: 0, vendorCredits: 0, billedUsd: 0 })
+    const global = await globalRow(db)
+    expect(global.creditsSpent).toBe(0)
+    expect(global.vendorCreditsSpent).toBe(0)
   })
 })

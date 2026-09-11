@@ -41,15 +41,61 @@ describe('reason-code registry', () => {
     expect(Object.keys(ReasonCode).sort()).toEqual([...ALL_REASON_CODES].sort())
   })
 
-  it('marks the F4-owned codes as reachable and defers the rest', () => {
-    const reachable = reachableReasonCodes('F4')
-    // Everything F0-F3 could raise, plus F4's four. Three of them describe a contact
-    // route and could not exist before this milestone created the first `Contact`;
-    // the fourth, `outreach_not_permitted`, has had a fully unit-tested predicate
-    // since F0 and has been unreachable that whole time because nothing composed a
-    // draft. F4 is where Part G's most important policy test finally runs against a
-    // real path.
+  it('marks the F5-owned codes as reachable and defers the rest', () => {
+    const reachable = reachableReasonCodes('F5')
+    // Everything F0-F4 could raise, plus F5's fifteen — the fourteen the F4 handover
+    // named, and `recipient_not_owned`, added in F5 as the 40th code.
+    //
+    // The enum is closed and a new value costs a migration and an owner, so F4 §4.11
+    // was right to map gate failures onto existing codes rather than invent one. This
+    // is the case with no analogue: Part F's F5 deliverable is "verified sends to
+    // owned inboxes ONLY", and folding that refusal into `sending_disabled` would make
+    // the single most safety-critical refusal in the milestone indistinguishable, in
+    // every counter and every audit row, from "the operator has not set the env flag".
     expect(reachable.sort()).toEqual(
+      [
+        'application_submitted',
+        'approval_hash_mismatch',
+        'breaker_open',
+        'budget_exhausted',
+        'cap_exceeded',
+        'content_unchanged',
+        'duplicate',
+        'duplicate_company',
+        'duplicate_contact',
+        'executive_only_contact',
+        'hard_bounce',
+        'host_denied',
+        'injection_detected',
+        'insufficient_evidence',
+        'kill_switch_account',
+        'kill_switch_domain',
+        'kill_switch_global',
+        'legal_policy_mismatch',
+        'low_relevance',
+        'no_public_recruiting_route',
+        'opt_out',
+        'outdated_role',
+        'outreach_not_permitted',
+        'profile_incomplete',
+        'rate_limited',
+        'recipient_not_owned',
+        'replied',
+        'robots_disallowed',
+        'sending_disabled',
+        'soft_bounce',
+        'source_unavailable',
+        'stale_at_send',
+        'suppressed',
+        'terms_prohibited',
+        'user_paused',
+        'weak_evidence',
+        'wrong_contact',
+      ].sort(),
+    )
+    // F4's own set stays exactly what it was: bumping the stage adds codes, it never
+    // reclassifies one that already shipped.
+    expect(reachableReasonCodes('F4').sort()).toEqual(
       [
         'application_submitted',
         'budget_exhausted',
@@ -153,16 +199,13 @@ describe('reason-code registry', () => {
         'terms_prohibited',
       ].sort(),
     )
-    // Nothing owned by a later milestone claims to be reachable now.
+    // Nothing owned by a later milestone claims to be reachable now. F7's browser
+    // layer is the only set left after F5 — D4 defers it, and the seam is types only.
     expect(reachable).not.toContain('browser_blocked')
-    // F5's fourteen in particular. F4 composes and approves, but sends nothing — so
-    // every code that describes a transmission or its outcome is still unreachable,
-    // including `approval_hash_mismatch`, whose check F4 built and tested but whose
-    // raising belongs to D6's send gate.
-    expect(reachable).not.toContain('approval_hash_mismatch')
-    expect(reachable).not.toContain('hard_bounce')
-    expect(reachable).not.toContain('suppressed')
-    expect(reachable).not.toContain('cap_exceeded')
-    expect(reachable).not.toContain('stale_at_send')
+    expect(reachable).not.toContain('browser_needs_user')
+    expect(reachable).not.toContain('browser_policy_rejected')
+    expect(reachableReasonCodes('F7').sort()).toEqual(
+      [...reachable, 'browser_blocked', 'browser_needs_user', 'browser_policy_rejected'].sort(),
+    )
   })
 })

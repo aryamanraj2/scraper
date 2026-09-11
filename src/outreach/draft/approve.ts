@@ -38,8 +38,34 @@ import type { DraftComposition } from './message.js'
 
 export type ApproveResult =
   | { ok: true; draftId: string; approvalHash: string }
-  | { ok: false; reason: 'unknown_draft' | 'not_gated' | 'already_approved' | 'no_recipient' | 'no_composition'; detail: string }
+  | {
+      ok: false
+      reason:
+        | 'unknown_draft'
+        | 'not_gated'
+        | 'already_approved'
+        | 'no_recipient'
+        | 'no_composition'
+        | 'no_sender_identity'
+      detail: string
+    }
 
+/**
+ * ## Where `senderIdentity` comes from, and the hole this closed *(F5 §4.2)*
+ *
+ * A7's field list includes `sender_identity`, and until F5 it was a caller option that
+ * no caller passed: `tools/run-drafts.ts` called `approveDraft(db, id, by)` and every
+ * stored `approval_hash` was therefore computed over `null`. The send gate would have
+ * had to pass `null` too in order to match — so the hash bound the subject, the body,
+ * the recipient, the resume file and every citation, and did *not* bind the one field
+ * that decides whose name is on the message. Swapping the sending account would have
+ * left the approval valid.
+ *
+ * It is read from `CandidateProfile.senderIdentity` here, stored on the draft, and
+ * read back from the draft when the gate recomputes. An approval with no identity to
+ * freeze is refused rather than defaulted, because defaulting is what produced the
+ * hole.
+ */
 export async function approveDraft(
   db: Db,
   draftId: string,
@@ -62,7 +88,7 @@ export async function approveDraft(
       citedEvidenceIds: true,
       approvedClaimIds: true,
       contact: { select: { emailNormalized: true } },
-      resumeVersion: { select: { id: true, fileSha256: true } },
+      resumeVersion: { select: { id: true, fileSha256: true, linkUrl: true } },
     },
   })
   if (!draft) return { ok: false, reason: 'unknown_draft', detail: draftId }
@@ -77,6 +103,20 @@ export async function approveDraft(
   if (!draft.contact) return { ok: false, reason: 'no_recipient', detail: 'draft has no contact' }
   if (!draft.composition) return { ok: false, reason: 'no_composition', detail: draft.id }
 
+  // An explicit argument wins — a test pins a value — but the real source is the
+  // profile, and there is no fallback to null.
+  const profile = await db.candidateProfile.findFirst({ select: { senderIdentity: true } })
+  const senderIdentity = opts.senderIdentity ?? profile?.senderIdentity ?? null
+  if (!senderIdentity) {
+    return {
+      ok: false,
+      reason: 'no_sender_identity',
+      detail:
+        'CandidateProfile.senderIdentity is unset: there is no identity to freeze into the ' +
+        'approval, and A7 hashes it. Run `npm run seed:operator`.',
+    }
+  }
+
   const input: ApprovalHashInput = {
     subject: draft.subject ?? '',
     bodyText: draft.bodyText ?? '',
@@ -84,9 +124,12 @@ export async function approveDraft(
     resumeVersionId: draft.resumeVersion?.id ?? null,
     // The FILE, not just the row id: the operator edits resumes in place (A7, F3 §4.11).
     resumeSha256: draft.resumeVersion?.fileSha256 ?? null,
+    // And the LINK, because H3 links rather than attaches and the URL is what the
+    // recipient receives (F5 — see hash.ts for the measurement that required this).
+    resumeLinkUrl: draft.resumeVersion?.linkUrl ?? null,
     citedEvidenceIds: draft.citedEvidenceIds,
     approvedClaimIds: draft.approvedClaimIds,
-    senderIdentity: opts.senderIdentity ?? null,
+    senderIdentity,
     promptVersion: draft.promptVersion,
     outreachCase: draft.outreachCase ?? '',
     composition: draft.composition as DraftComposition,
@@ -98,6 +141,7 @@ export async function approveDraft(
     data: {
       status: 'approved',
       approvalHash,
+      senderIdentity,
       approvedBy,
       approvedAt: now,
     },
@@ -111,6 +155,7 @@ export async function approveDraft(
     subjectId: draftId,
     metadata: {
       approvalHash,
+      senderIdentity,
       outreachCase: draft.outreachCase,
       // Recorded so an auditor can see WHAT was approved without re-reading the row,
       // which is the point of handover.md §11's reconstruction criterion.
@@ -146,17 +191,26 @@ export async function verifyApprovalHash(
 ): Promise<HashVerification> {
   const draft = await db.draft.findUniqueOrThrow({
     where: { id: draftId },
+    // NOTE: `senderIdentity` is read from the DRAFT, not re-derived from the profile.
+    // That is the asymmetry A7 asks for and it is easy to get backwards. Every other
+    // field here is deliberately live — a swapped recipient or an edited resume must
+    // invalidate the approval — but the identity the human approved is a property of
+    // the approval itself. Re-deriving it from `CandidateProfile` would mean editing
+    // the profile silently re-validated every outstanding approval, which is the
+    // "recomputing from live data always matches and proves nothing" failure applied
+    // to the one field that says whose name is on the message.
     select: {
       subject: true,
       bodyText: true,
       composition: true,
       outreachCase: true,
       approvalHash: true,
+      senderIdentity: true,
       promptVersion: true,
       citedEvidenceIds: true,
       approvedClaimIds: true,
       contact: { select: { emailNormalized: true } },
-      resumeVersion: { select: { id: true, fileSha256: true } },
+      resumeVersion: { select: { id: true, fileSha256: true, linkUrl: true } },
     },
   })
 
@@ -166,9 +220,10 @@ export async function verifyApprovalHash(
     recipientEmailNormalized: draft.contact?.emailNormalized ?? '',
     resumeVersionId: draft.resumeVersion?.id ?? null,
     resumeSha256: draft.resumeVersion?.fileSha256 ?? null,
+    resumeLinkUrl: draft.resumeVersion?.linkUrl ?? null,
     citedEvidenceIds: draft.citedEvidenceIds,
     approvedClaimIds: draft.approvedClaimIds,
-    senderIdentity: opts.senderIdentity ?? null,
+    senderIdentity: opts.senderIdentity ?? draft.senderIdentity,
     promptVersion: draft.promptVersion,
     outreachCase: draft.outreachCase ?? '',
     composition: draft.composition as DraftComposition,

@@ -13,7 +13,9 @@
 import 'dotenv/config'
 import { prisma, disconnectPrisma } from '../src/core/db/client.js'
 import { seedApprovedClaims } from '../src/apply/claims/seed-claims.js'
+import { seedCandidateProfile } from '../src/apply/claims/seed-profile.js'
 import { seedResumeVersions } from '../src/apply/resumes/seed-resumes.js'
+import { env } from '../src/core/config/config.js'
 
 const db = prisma()
 
@@ -30,6 +32,10 @@ if (resumes.missingFiles.length > 0) {
   for (const f of resumes.missingFiles) console.log(`      ${f}`)
   console.log('    The row is seeded without a hash; packetHash cannot pin the document.')
 }
+if (resumes.unhosted.length > 0) {
+  console.log(`  ⚠ not hosted, so linkUrl is still a local path: ${resumes.unhosted.join(', ')}`)
+  console.log('    H3: a draft LINKS the resume. A file:// URL is useless in an email.')
+}
 
 const claims = await seedApprovedClaims(db)
 console.log('\nApprovedClaim')
@@ -43,6 +49,21 @@ if (claims.missingRequired.length > 0) {
   console.log(`  ⚠ not supplied by the operator: ${claims.missingRequired.join(', ')}`)
   console.log('    Questions needing these are left UNANSWERED on every packet.')
   console.log('    handover.md §8 forbids inventing a graduation date or an availability window.')
+}
+
+// D6 condition 3's row, derived from the claims above and from nothing else — there
+// is deliberately no second source of candidate facts (F3 §4.1).
+const profile = await seedCandidateProfile(db, { sendingAccount: env().GMAIL_SENDING_ACCOUNT })
+console.log('\nCandidateProfile')
+console.log(`  ${profile.created ? 'created' : 'updated'} from ApprovedClaim`)
+if (profile.missingClaimKeys.length > 0) {
+  console.log(`  ⚠ claims not found: ${profile.missingClaimKeys.join(', ')}`)
+}
+if (profile.complete) {
+  console.log('  complete against the enumerated field list (D6 condition 3)')
+} else {
+  console.log(`  ⚠ INCOMPLETE — missing: ${profile.missingFields.join(', ')}`)
+  console.log('    Every send will abort with profile_incomplete until these exist.')
 }
 
 await disconnectPrisma()

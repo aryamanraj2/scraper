@@ -14,7 +14,6 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { prisma, disconnectPrisma } from '../src/core/db/client.js'
 import { MILESTONE_STAGE, isAtOrAfter } from '../src/core/config/stage.js'
-import { resolveSendingEnabled } from '../src/core/config/config.js'
 import { reachableReasonCodes } from '../src/core/reason-codes/registry.js'
 import { validateComposition } from '../src/outreach/draft/message.js'
 import { TEMPLATE_IDS } from '../src/outreach/draft/templates.js'
@@ -160,44 +159,69 @@ const db = prisma()
   })
 }
 
-// 7. Zero external sends, by both independent factors.
+// 7. Nothing is transmitted without a frozen human approval behind it.
+//
+// This criterion used to read "zero external sends; sending still hard-disabled",
+// asserted as `!resolveSendingEnabled({envFlag:true}) && sendAttempts === 0`. Both
+// halves became false the moment F5 did its job, which made a shipped milestone's
+// verifier fail for the reason the next milestone succeeded — F2 §4.9's lesson,
+// repeated: "a verifier for a shipped milestone must keep passing at every later
+// stage, or it stops being a regression test."
+//
+// What F4 is actually responsible for, forever, is that a draft cannot become a
+// transmission without an approval frozen over A7's field list. That is the property
+// checked now, and it gets STRONGER rather than weaker as sends accumulate.
 {
-  const sending = resolveSendingEnabled({ envFlag: true })
-  const attempts = await db.sendAttempt.count()
+  const attempts = await db.sendAttempt.findMany({
+    select: { id: true, draft: { select: { approvalHash: true, approvedBy: true, approvedAt: true } } },
+  })
+  const unapproved = attempts.filter(
+    (a) => !a.draft.approvalHash || !a.draft.approvedBy || !a.draft.approvedAt,
+  )
   checks.push({
-    name: 'Zero external sends; sending still hard-disabled',
-    ok: !sending.enabled && attempts === 0,
+    name: 'No transmission without a frozen human approval (handover.md §1.6, A7)',
+    ok: unapproved.length === 0,
     detail:
-      `resolveSendingEnabled({envFlag:true}) = ${sending.enabled} ` +
-      `(${sending.enabled ? '' : sending.reason}); ${attempts} SendAttempt row(s); MILESTONE_STAGE=${MILESTONE_STAGE}`,
+      `${attempts.length} SendAttempt row(s), ${unapproved.length} without a frozen approval_hash; ` +
+      `MILESTONE_STAGE=${MILESTONE_STAGE}`,
   })
 }
 
-// 8. No Gmail adapter, and nothing that could send.
+// 8. The composer holds no mail transport.
+//
+// Also rewritten for F5. The old check scanned src/, app/ and tools/ for any mail
+// transport at all, which was the right check while no adapter existed and became a
+// check against F5 existing the moment one did.
+//
+// F4's real boundary is narrower and permanent: the DRAFTING layer has no way to
+// transmit. `src/outreach/draft/` and `src/apply/` compose, gate and approve; they
+// hold no `MailProvider`, import nothing from `src/outreach/mail/`, and cannot
+// construct a transport. Enforced by inspection here and by constructor injection in
+// the code — the same shape D5 uses to keep the browser worker away from a write path.
 {
-  const FORBIDDEN = /gmail\.googleapis|googleapis\.com\/gmail|nodemailer|smtp\.|createTransport/i
   const offenders: string[] = []
-  // This file states the pattern in order to search for it, so it matches itself.
-  // Excluded by path rather than by making the pattern unreadable.
-  const SELF = join(process.cwd(), 'tools', 'verify-f4.ts')
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
       if (statSync(full).isDirectory()) walk(full)
-      else if (
-        full !== SELF &&
-        (full.endsWith('.ts') || full.endsWith('.tsx')) &&
-        FORBIDDEN.test(readFileSync(full, 'utf8'))
-      ) {
-        offenders.push(relative(process.cwd(), full))
+      else if (full.endsWith('.ts') || full.endsWith('.tsx')) {
+        const text = readFileSync(full, 'utf8')
+        if (/from ['"].*outreach\/mail\//.test(text) || /\bMailProvider\b/.test(text)) {
+          offenders.push(relative(process.cwd(), full))
+        }
       }
     }
   }
-  for (const dir of ['src', 'app', 'tools']) walk(join(process.cwd(), dir))
+  for (const dir of ['src/outreach/draft', 'src/outreach/contacts', 'src/apply', 'app']) {
+    walk(join(process.cwd(), dir))
+  }
   checks.push({
-    name: 'No Gmail adapter or mail transport exists (F5 owns it)',
+    name: 'The drafting layer cannot transmit (no MailProvider below the send gate)',
     ok: offenders.length === 0,
-    detail: offenders.length === 0 ? 'no mail transport in src/, app/ or tools/' : `found in: ${offenders.join(', ')}`,
+    detail:
+      offenders.length === 0
+        ? 'src/outreach/draft, src/outreach/contacts, src/apply and app/ reach no mail transport'
+        : `found in: ${offenders.join(', ')}`,
   })
 }
 

@@ -342,6 +342,7 @@ enum ReasonCode {
   duplicate_contact
   duplicate_company
   sending_disabled
+  recipient_not_owned
 
   // --- qualification / rejection (handover.md §5) ---
   no_public_recruiting_route
@@ -509,10 +510,27 @@ model ResearchBudget {
   creditsCap     Int      @map("credits_cap")
   /// The subset of `creditsSpent` that consumed a paid vendor allowance — Firecrawl
   /// today. F2 spent 1,015 credits and none of them were money, so a single counter
-  /// cannot answer "how much of the free tier is left"; this one can. It is
-  /// deliberately not a second cap: one ceiling is what makes the no-op test hold.
+  /// cannot answer "how much of the free tier is left"; this one can.
   vendorCreditsSpent Int  @default(0) @map("vendor_credits_spent")
+  /// The ceiling on the PAID subset, read only from the global envelope (F5 §4.3).
+  ///
+  /// F3 §4.10 made the paid spend countable but deliberately left it uncapped, on the
+  /// grounds that one ceiling is what makes Part G's "cap zero -> all research no-ops"
+  /// hold. Measured consequence: a 1,975-company ingest spent the whole 1,000-credit
+  /// envelope — an envelope sized to Firecrawl's free tier — on free static fetches in
+  /// about an hour, and every gated fetch afterwards returned `budget_exhausted` for
+  /// fifty minutes while the run kept going. A number that bounds two unlike things
+  /// bounds neither honestly.
+  ///
+  /// So there are now two ceilings and the no-op test still holds, because
+  /// `creditsCap` still counts every unit: `creditsCap` bounds all research, and this
+  /// bounds the part that is money. A cap of 0 means no paid vendor spend is
+  /// authorised, which is the truthful state until an allowance is actually bought.
+  vendorCreditsCap Int    @default(0) @map("vendor_credits_cap")
   billedUsdSpent Decimal  @default(0) @map("billed_usd_spent") @db.Decimal(12, 6)
+  /// Enforced by `checkBudget` as of F5. It was decorative before that — the column
+  /// existed and nothing read it — which would have gone unnoticed until the first
+  /// per-lookup billed provider (a Hunter key lands before F6) ran unbounded.
   billedUsdCap   Decimal  @map("billed_usd_cap") @db.Decimal(12, 6)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -928,6 +946,20 @@ model Draft {
   /// one query rather than a walk of the JSON.
   approvedClaimIds String[]    @map("approved_claim_ids")
   promptVersion   String?      @map("prompt_version")
+  /// A7's `sender_identity`, frozen at approval — the account this message was
+  /// approved to go out as.
+  ///
+  /// It is a column rather than a parameter because of a hole F5 found: `approveDraft`
+  /// took `senderIdentity` as an *option*, `tools/run-drafts.ts` never passed one, and
+  /// so every stored `approval_hash` was computed over `null`. The send gate would
+  /// then have had to pass `null` too in order to match — which means A7's hash bound
+  /// everything except the one field that decides whose name is on the message.
+  /// Swapping the sending account would have left the approval valid.
+  ///
+  /// Read from `CandidateProfile.senderIdentity` at approval, stored here, and read
+  /// back from here when the gate recomputes the hash. Changing the profile therefore
+  /// invalidates approvals taken under the old identity, which is A7 working.
+  senderIdentity  String?      @map("sender_identity")
   /// A7: sha256 over canonical_json({subject, body_text, recipient_email_normalized,
   /// resume_version_id, attachment_sha256[], cited_evidence_ids[], sender_identity,
   /// prompt_version}).
@@ -972,6 +1004,20 @@ model SendAttempt {
   campaignCycle     String            @map("campaign_cycle")
   /// 1 = first touch. D3's partial unique indexes key off this.
   touchNumber       Int               @map("touch_number")
+  /// Which of the company's permitted first-touch slots this attempt occupies,
+  /// copied from the `Draft` it transmits.
+  ///
+  /// D3 gave a company exactly one first touch per cycle. The operator's F4 §10.7
+  /// decision is one for a small company and two for a larger one ("keep it 1 per
+  /// small company and 2 for a decent one"), so the company-level partial unique
+  /// index is keyed on this column instead of being dropped: the database still
+  /// caps the company, it just caps it at the number of slots rather than at one.
+  /// `src/outreach/draft/slots.ts` decides the value (teamSize >= 100 -> 2 slots,
+  /// unknown -> 1) and only 0 and 1 are ever allocated.
+  ///
+  /// A2's per-CONTACT index is untouched by this: one first touch per human per
+  /// cycle regardless of track is the invariant A2 exists for.
+  touchSlot         Int               @default(0) @map("touch_slot")
   idempotencyKey    String            @unique @map("idempotency_key")
   rfc822MessageId   String            @unique @map("rfc822_message_id")
   status            SendAttemptStatus @default(in_flight) @map("status")
@@ -991,10 +1037,16 @@ model SendAttempt {
   optOuts        OptOut[]
 
   // D3's two partial unique indexes are NOT declared here — Prisma cannot express
-  // a WHERE clause on an index. They live in a hand-written SQL migration. These
+  // a WHERE clause on an index. They live in hand-written SQL migrations. These
   // plain indexes only support the lookups.
+  //
+  //   one_first_touch_per_contact_per_cycle  (contact_id, campaign_cycle)  — A2, unchanged
+  //   one_first_touch_per_company_slot_per_cycle
+  //       (company_id, campaign_cycle, touch_slot)  — F5, replaces the two-column form
+  //
+  // `prisma db push` reports both as drift and offers to drop them. It is banned.
   @@index([contactId, campaignCycle, touchNumber])
-  @@index([companyId, campaignCycle, touchNumber])
+  @@index([companyId, campaignCycle, touchNumber, touchSlot])
   @@index([status])
   @@map("send_attempt")
 }

@@ -46,9 +46,23 @@ const db = prisma()
   const normalized = await db.company.count({ where: { status: { in: [...NORMALIZED_OR_LATER] } } })
   const withDomain = await db.company.count({ where: { canonicalDomain: { not: '' } } })
   const byStatus = await db.company.groupBy({ by: ['status'], _count: { _all: true } })
+  // The UPPER bound is gone, and its removal is the third instance of one shape.
+  //
+  // Part F's F1 target was "100-200 normalized companies", and the verifier encoded it
+  // as a range. The corpus has since been widened to 1,975 companies — the operator
+  // running §9.1's `--feed all` ingest, which F2, F3 and F4 all flagged as the highest-
+  // value open question in the project — and the range turned a shipped milestone's
+  // verifier into a test that fails because the project made progress.
+  //
+  // F2 §4.9 found this in the same file for a different reason (it asserted
+  // `MILESTONE_STAGE === 'F1'`, and counted a lifecycle state a later milestone
+  // legitimately advances past). The rule it drew is the one being applied again:
+  // **a verifier for a shipped milestone must keep passing at every later stage, or it
+  // stops being a regression test.** A floor is a regression test. A ceiling is a
+  // statement that the project will not grow.
   checks.push({
-    name: '100-200 normalized companies',
-    ok: normalized >= 100 && normalized <= 200 && withDomain === total,
+    name: 'At least 100 normalized companies, all with a canonical domain',
+    ok: normalized >= 100 && withDomain === total,
     detail:
       `${normalized} normalized or later of ${total} total ` +
       `(${byStatus.map((s) => `${s.status}=${s._count._all}`).join(', ')}); ` +

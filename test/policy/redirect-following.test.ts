@@ -184,4 +184,42 @@ describe('detection follows redirects', () => {
     if (!outcome.found) throw new Error('unreachable')
     expect(outcome.detection.boardToken).toBe('partlyco')
   })
+
+  it('treats network transport errors as source_unavailable and keeps trying later paths', async () => {
+    const company = await testDb().company.create({
+      data: {
+        canonicalDomain: 'sslbroken.example',
+        displayName: 'SSL Broken',
+        countries: [],
+        locations: [],
+        tags: [],
+      },
+    })
+
+    class ThrowingFetcher extends StubFetcher {
+      override async fetchText(url: string) {
+        if (url === 'https://sslbroken.example') {
+          throw new Error('ERR_SSL_TLSV1_UNRECOGNIZED_NAME')
+        }
+        return super.fetchText(url)
+      }
+    }
+
+    const throwingFetcher = new ThrowingFetcher({
+      'https://sslbroken.example/careers': {
+        body: '<a href="https://jobs.ashbyhq.com/sslbroken">Roles</a>',
+      },
+    })
+
+    const outcome = await detectAtsForCompany(
+      testDb(),
+      throwingFetcher,
+      { ...company, careersUrl: null, website: null },
+      { maxPages: 2 },
+    )
+
+    expect(outcome).toMatchObject({ found: true })
+    if (!outcome.found) throw new Error('unreachable')
+    expect(outcome.detection.boardToken).toBe('sslbroken')
+  })
 })

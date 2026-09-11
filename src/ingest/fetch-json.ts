@@ -35,11 +35,16 @@ export async function fetchJson(
   url: string,
   opts: FetchJsonOptions = {},
 ): Promise<FetchedJson> {
-  const result = await fetcher.fetchText(url, {
-    companyId: opts.companyId ?? null,
-    cost: opts.cost ?? 1,
-    ...(opts.maxBytes === undefined ? {} : { maxBytes: opts.maxBytes }),
-  })
+  let result: Awaited<ReturnType<GatedFetcher['fetchText']>>
+  try {
+    result = await fetcher.fetchText(url, {
+      companyId: opts.companyId ?? null,
+      cost: opts.cost ?? 1,
+      ...(opts.maxBytes === undefined ? {} : { maxBytes: opts.maxBytes }),
+    })
+  } catch (err) {
+    throw SourceError.unusable(url, (err as Error).message)
+  }
   if (!result.ok) throw SourceError.refused(url, result.reason)
 
   const { statusCode, body, truncated } = result.response

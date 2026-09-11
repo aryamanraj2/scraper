@@ -38,7 +38,12 @@
     "start": "next start",
     "contacts:curate": "tsx tools/run-contacts.ts",
     "drafts:run": "tsx tools/run-drafts.ts",
-    "verify:f4": "tsx tools/verify-f4.ts"
+    "verify:f4": "tsx tools/verify-f4.ts",
+    "gmail:auth": "tsx tools/gmail-auth.ts",
+    "send:test": "tsx tools/send-test.ts",
+    "send:run": "tsx tools/run-send.ts",
+    "inbox:sync": "tsx tools/run-inbox.ts",
+    "verify:f5": "tsx tools/verify-f5.ts"
   },
   "dependencies": {
     "@mozilla/readability": "0.6.0",

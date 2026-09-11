@@ -3,7 +3,6 @@ import { FetchPolicyGate } from '../../src/core/policy/fetch-policy-gate.js'
 import { HostRateLimiter } from '../../src/core/policy/rate-limit.js'
 import { seedHostPolicies } from '../../src/core/policy/host-policy.js'
 import { checkKillSwitch, engageKillSwitch, releaseKillSwitch } from '../../src/core/killswitch/kill-switch.js'
-import { resolveSendingEnabled } from '../../src/core/config/config.js'
 import { reachableReasonCodes, type ReasonCodeValue } from '../../src/core/reason-codes/registry.js'
 import { runSeedIngest } from '../../src/ingest/yc/seed-loader.js'
 import { YC_OSS_FEEDS, YcOssSeedProvider } from '../../src/ingest/yc/yc-oss.js'
@@ -21,6 +20,10 @@ import { generateApplicationPackets } from '../../src/apply/packet/generate.js'
 import { acceptPacket, markPacketSubmitted } from '../../src/apply/packet/lifecycle.js'
 import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
 import { mockAgent } from '../setup.js'
+import { makeSendWorld, sendGateOptions, OWNED_INBOX, SEND_TEST_SALT } from '../helpers/send-world.js'
+import { evaluateSendGate } from '../../src/outreach/send/gate.js'
+import { ingestInboundMessage, pauseLead, type InboundForIngest } from '../../src/outreach/send/ingest-outcomes.js'
+import { emailHmac } from '../../src/core/crypto/secret-store.js'
 
 const USER_AGENT = 'outreach-intelligence-research/0.1 (+https://example.invalid/about)'
 
@@ -100,9 +103,22 @@ const scenarios: Record<string, () => Promise<ReasonCodeValue>> = {
     return r.allowed ? ('sending_disabled' as ReasonCodeValue) : r.reason
   },
 
+  /**
+   * Driven through the REAL send gate as of F5, not through `resolveSendingEnabled`
+   * alone.
+   *
+   * It used to read `resolveSendingEnabled({ envFlag: true })` and rely on
+   * `MILESTONE_STAGE` being below F5 to produce the refusal. At F5 the stage no longer
+   * refuses, so that scenario would have started returning `enabled` and the code
+   * would have quietly become unreachable — which is exactly the failure this whole
+   * file exists to prevent. The env flag is the remaining factor and the gate is where
+   * it is read.
+   */
   sending_disabled: async () => {
-    const d = resolveSendingEnabled({ envFlag: true })
-    return d.enabled ? ('host_denied' as ReasonCodeValue) : d.reason
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions({ envFlag: false }))
+    return decision.allowed ? ('host_denied' as ReasonCodeValue) : decision.reason
   },
 
   kill_switch_global: async () => {
@@ -560,6 +576,250 @@ const scenarios: Record<string, () => Promise<ReasonCodeValue>> = {
     return out.refusals.find((r) => r.reason === 'legal_policy_mismatch')?.reason
       ?? ('sending_disabled' as ReasonCodeValue)
   },
+
+  // --- F5: the send gate (D6) ---------------------------------------------
+  //
+  // Every one of these drives `evaluateSendGate` over a real approved draft. The
+  // world is built by `makeSendWorld`, which runs the real `approveDraft` and so
+  // freezes a real `approval_hash`; each scenario then changes exactly one fact.
+  //
+  // F4's lesson is the reason for the shape: two of its four codes were initially
+  // unreachable through any real path because two predicate inputs had been collapsed
+  // into one, and only driving the real composer found it.
+
+  recipient_not_owned: async () => {
+    // The 40th code, added in F5. Its scenario is not hypothetical: `info@nanonets.com`
+    // is the recipient of the one approved draft in the live database, and at F5 every
+    // other D6 condition passes for it.
+    const db = testDb()
+    const world = await makeSendWorld(db, { contactEmail: 'info@nanonets.com' })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  approval_hash_mismatch: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    await db.draft.update({ where: { id: world.draftId }, data: { bodyText: 'edited after approval' } })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  suppressed: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    await db.suppression.create({
+      data: { emailHmac: emailHmac(OWNED_INBOX, SEND_TEST_SALT), scope: 'contact', reasonCode: 'opt_out' },
+    })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  profile_incomplete: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db, { withProfile: false })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  stale_at_send: async () => {
+    // A8: "A draft approved Friday can send Monday citing a closed req."
+    const db = testDb()
+    const world = await makeSendWorld(db, {
+      evidenceObservedAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000),
+    })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  cap_exceeded: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    const decision = await evaluateSendGate(
+      db,
+      world.draftId,
+      sendGateOptions({ caps: { perDay: 0, perDomainPerDay: 10 } }),
+    )
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  breaker_open: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    // Three hard bounces: the absolute limit, which trips before any rate is
+    // statistically meaningful (A11's sample problem, applied to a breaker).
+    const attempt = await db.sendAttempt.create({
+      data: {
+        draftId: world.draftId,
+        contactId: world.contactId,
+        companyId: world.companyId,
+        campaignCycle: 'earlier-cycle',
+        touchNumber: 1,
+        idempotencyKey: 'breaker-key',
+        rfc822MessageId: '<breaker@owned.example>',
+        status: 'sent',
+      },
+      select: { id: true },
+    })
+    for (let i = 0; i < 3; i += 1) {
+      await db.bounce.create({ data: { sendAttemptId: attempt.id, hardness: 'hard', occurredAt: new Date() } })
+    }
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  /** Part G: four qualified leads, one alias -> one send, three `duplicate_contact`. */
+  duplicate_contact: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    await db.sendAttempt.create({
+      data: {
+        draftId: world.draftId,
+        contactId: world.contactId,
+        companyId: world.companyId,
+        campaignCycle: world.campaignCycle,
+        touchNumber: 1,
+        touchSlot: 1,
+        idempotencyKey: 'first-touch-already-sent',
+        rfc822MessageId: '<already@owned.example>',
+        status: 'sent',
+      },
+    })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  /**
+   * The company-level ceiling, which is a different invariant from the per-contact
+   * one: a DIFFERENT human at the same company already occupies this slot.
+   */
+  duplicate_company: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    const other = await db.contact.create({
+      data: {
+        companyId: world.companyId,
+        emailNormalized: 'jobs@acme.example',
+        contactType: 'careers_alias',
+        discoveryMethod: 'page_published',
+        verified: true,
+        evidenceId: world.evidenceId,
+        capturedAt: new Date(),
+      },
+      select: { id: true },
+    })
+    await db.sendAttempt.create({
+      data: {
+        draftId: world.draftId,
+        contactId: other.id,
+        companyId: world.companyId,
+        campaignCycle: world.campaignCycle,
+        touchNumber: 1,
+        touchSlot: 0,
+        idempotencyKey: 'other-contact-same-slot',
+        rfc822MessageId: '<otherslot@owned.example>',
+        status: 'sent',
+      },
+    })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  user_paused: async () => {
+    const db = testDb()
+    const world = await makeSendWorld(db)
+    await pauseLead(db, world.leadId, { note: 'coverage scenario' })
+    const decision = await evaluateSendGate(db, world.draftId, sendGateOptions())
+    return decision.allowed ? ('sending_disabled' as ReasonCodeValue) : decision.reason
+  },
+
+  // --- F5: outcome ingestion ----------------------------------------------
+  //
+  // Each drives `ingestInboundMessage` over a real `SendAttempt`, matched the way a
+  // real bounce or reply matches: on the `In-Reply-To` header carrying our own
+  // deterministic Message-ID, which is why A9 insists the id be ours.
+
+  hard_bounce: async () => {
+    const r = await ingestOutcome(
+      'Delivery Status Notification (Failure)',
+      'Action: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 5.1.1 no such user',
+      { from: 'mailer-daemon@googlemail.com' },
+    )
+    return r
+  },
+
+  soft_bounce: async () => {
+    // A12: this one must NOT write a permanent suppression. The scenario asserts the
+    // code; `test/policy/outcome-ingestion.test.ts` asserts the absence of the row.
+    return await ingestOutcome(
+      'Delivery Status Notification (Delay)',
+      'Action: failed\nStatus: 4.2.2\nDiagnostic-Code: smtp; 452 4.2.2 over quota',
+      { from: 'mailer-daemon@googlemail.com' },
+    )
+  },
+
+  opt_out: async () => {
+    // An answer to the opt-out line this system actually sends: "If you'd rather I
+    // didn't write again, say so and I won't."
+    return await ingestOutcome('Re: Internship enquiry', "I'd rather you didn't write again, thanks.")
+  },
+
+  wrong_contact: async () => {
+    return await ingestOutcome(
+      'Re: Internship enquiry',
+      "I'm not the right person for this — try our careers team.",
+    )
+  },
+
+  replied: async () => {
+    return await ingestOutcome(
+      'Re: Internship enquiry',
+      'Thanks for writing — we do run a summer internship, applications open in November.',
+    )
+  },
+}
+
+/**
+ * Sends one message for real (through the fake transport's rows), then feeds a received
+ * message back through `ingestInboundMessage` and returns the reason code it produced.
+ */
+async function ingestOutcome(
+  subject: string,
+  bodyText: string,
+  over: { from?: string } = {},
+): Promise<ReasonCodeValue> {
+  const db = testDb()
+  const world = await makeSendWorld(db)
+  const messageId = '<oi.' + 'b'.repeat(32) + '@owned.example>'
+  await db.sendAttempt.create({
+    data: {
+      draftId: world.draftId,
+      contactId: world.contactId,
+      companyId: world.companyId,
+      campaignCycle: world.campaignCycle,
+      touchNumber: 1,
+      idempotencyKey: 'outcome-key',
+      rfc822MessageId: messageId,
+      providerThreadId: 'thread-outcome',
+      providerMessageId: 'pm-outcome',
+      status: 'sent',
+    },
+  })
+
+  const message: InboundForIngest = {
+    providerMessageId: 'inbound-1',
+    threadId: 'thread-outcome',
+    from: over.from ?? 'someone@acme.example',
+    subject,
+    bodyText,
+    inReplyTo: messageId,
+    receivedAt: new Date(),
+  }
+  const result = await ingestInboundMessage(db, message, { suppressionSalt: SEND_TEST_SALT })
+  if (result.kind === 'unmatched' || result.reasonCode === null) {
+    return 'sending_disabled' as ReasonCodeValue
+  }
+  return result.reasonCode
 }
 
 /**
@@ -666,7 +926,7 @@ async function draftWorld(
   })
 }
 
-describe('every F4-owned reason code is reachable through its real code path', () => {
+describe('every F5-owned reason code is reachable through its real code path', () => {
   for (const [code, run] of Object.entries(scenarios)) {
     it(`raises ${code}`, async () => {
       expect(await run()).toBe(code)
@@ -674,7 +934,7 @@ describe('every F4-owned reason code is reachable through its real code path', (
   }
 
   it('covers exactly the codes this build stage claims to raise', () => {
-    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F4')].sort())
+    expect(Object.keys(scenarios).sort()).toEqual([...reachableReasonCodes('F5')].sort())
   })
 })
 

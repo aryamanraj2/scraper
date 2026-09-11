@@ -73,10 +73,20 @@ export async function fetchPage(
     visited.add(url)
     hops.push(url)
 
-    const result = await fetcher.fetchText(url, {
-      companyId: opts.companyId ?? null,
-      cost: opts.cost ?? 1,
-    })
+    let result: Awaited<ReturnType<GatedFetcher['fetchText']>>
+    try {
+      result = await fetcher.fetchText(url, {
+        companyId: opts.companyId ?? null,
+        cost: opts.cost ?? 1,
+      })
+    } catch (err) {
+      return {
+        ok: false,
+        reason: 'source_unavailable',
+        detail: `${url}: ${(err as Error).message}`,
+        fetches: fetches + 1,
+      }
+    }
     fetches += 1
     if (!result.ok) {
       return { ok: false, reason: result.reason, detail: `${url}: ${result.reason}`, fetches }

@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import type { Db } from '../../core/audit/audit-log.js'
 import { writeAudit } from '../../core/audit/audit-log.js'
-import { RESUME_VERSIONS, fileUrlFor, type ResumeVersionSeed } from './resumes-data.js'
+import { RESUME_VERSIONS, linkUrlFor, type ResumeVersionSeed } from './resumes-data.js'
 
 export type SeedResumeOutcome = {
   created: number
   updated: number
   missingFiles: string[]
+  /** Labels whose `linkUrl` is still a local path — unusable in an email (H3). */
+  unhosted: string[]
   tracksWired: string[]
   tracksWithoutDefault: string[]
 }
@@ -33,6 +35,7 @@ export async function seedResumeVersions(
     created: 0,
     updated: 0,
     missingFiles: [],
+    unhosted: [],
     tracksWired: [],
     tracksWithoutDefault: [],
   }
@@ -48,9 +51,14 @@ export async function seedResumeVersions(
       out.missingFiles.push(seed.filePath)
     }
 
+    if (seed.hostedUrl === null) out.unhosted.push(seed.label)
+
     const data = {
+      // H3: what a DRAFT links. `filePath` is what an ATS upload uses and stays
+      // exactly as it was — the two terminal actions want different artefacts and
+      // F3's mistake was making one field serve both.
+      linkUrl: linkUrlFor(seed),
       trackKey: seed.trackKey,
-      linkUrl: fileUrlFor(seed.filePath),
       filePath: seed.filePath,
       fileSha256: sha,
       isActive: true,

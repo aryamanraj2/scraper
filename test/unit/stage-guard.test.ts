@@ -13,18 +13,32 @@ import { resolveSendingEnabled } from '../../src/core/config/config.js'
  * An env-only guard does not satisfy that sentence — an operator, a stray .env, or
  * a mis-set CI variable can flip an env var. The build stage is the second factor,
  * and it changes only in a reviewed commit.
+ *
+ * ## What changed at F5, and what did not
+ *
+ * Two of these tests used to assert that the SHIPPED stage was below F5. That is no
+ * longer true and the assertions were rewritten rather than deleted — F5 is the
+ * milestone that unlocks sending, so a test asserting it cannot send was always going
+ * to have to change here, and the honest replacement is the property that still holds:
+ * **both factors are still required**, and the stage alone still sends nothing.
+ *
+ * The guard that replaces the stage guard is not in this file. At F5 the send gate
+ * refuses every recipient that is not on `OWNED_INBOXES`, and lifting that needs the
+ * F6 stage AND a second env flag — see `test/policy/owned-inbox.test.ts`. Part F's F5
+ * deliverable is "verified sends to owned inboxes only"; F6 is "enable sending".
  */
-describe('sending stays hard-disabled until F5', () => {
-  it('is currently building at a pre-send milestone', () => {
-    expect(isAtOrAfter(MILESTONE_STAGE, SENDING_UNLOCKED_AT)).toBe(false)
+describe('sending needs two independent factors', () => {
+  it('has reached the sending milestone', () => {
+    expect(isAtOrAfter(MILESTONE_STAGE, SENDING_UNLOCKED_AT)).toBe(true)
   })
 
-  it('refuses even when the env flag is explicitly true', () => {
-    const decision = resolveSendingEnabled({ envFlag: true })
+  it('still refuses when the env flag is unset, whatever the stage says', () => {
+    // The factor the stage bump did NOT remove. An operator has to say yes as well.
+    const decision = resolveSendingEnabled({ envFlag: false })
     expect(decision).toEqual({ enabled: false, reason: 'sending_disabled' })
   })
 
-  it('still refuses at F4, the last milestone before send readiness', () => {
+  it('refuses at F4, the last milestone before send readiness', () => {
     expect(resolveSendingEnabled({ envFlag: true, stage: 'F4' })).toEqual({
       enabled: false,
       reason: 'sending_disabled',

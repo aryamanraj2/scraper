@@ -19,6 +19,51 @@ const EnvSchema = z.object({
   SENDING_ENABLED: boolish.default(false),
 
   /**
+   * The addresses this build is permitted to send to while the recipient policy is
+   * `owned_only` — see `src/outreach/send/recipient-policy.ts`.
+   *
+   * Comma-separated. An untagged entry admits its own `+tag` variants, so
+   * `aryamanj250@gmail.com` covers `+f5a`, `+f5b` and `+f5c` without listing each.
+   * Empty (the default) refuses every recipient, which is the correct behaviour for
+   * a build that has not been told what it owns.
+   */
+  OWNED_INBOXES: z
+    .string()
+    .default('')
+    .transform((v) => v.split(',').map((s) => s.trim()).filter((s) => s !== '')),
+
+  /**
+   * Lifts the owned-inbox restriction — F6's pilot switch, present now so that
+   * lifting it is an explicit act rather than a side effect of the stage bump.
+   *
+   * It does nothing below F6. `resolveRecipientPolicy` requires the stage AND the
+   * flag, the same two-factor shape `resolveSendingEnabled` uses one level up.
+   */
+  SEND_EXTERNAL_RECIPIENTS_ENABLED: boolish.default(false),
+
+  /**
+   * The mailbox the Gmail adapter authenticates as and sends from.
+   *
+   * Configuration, not an assumption: the pilot sends from a personal Gmail (already
+   * DKIM-signed by Google and warmed by years of real history, where a fresh domain
+   * spends three weeks earning the same trust), and migrates to a Workspace mailbox
+   * on the owned domain around F6. Nothing downstream may hardcode either.
+   */
+  GMAIL_SENDING_ACCOUNT: z.string().min(1).optional(),
+  GMAIL_OAUTH_CLIENT_ID: z.string().optional(),
+  GMAIL_OAUTH_CLIENT_SECRET: z.string().optional(),
+
+  /**
+   * The domain part of the deterministic RFC 5322 `Message-ID` (A9).
+   *
+   * The owned domain rather than the sending account's, deliberately: A9 requires a
+   * "stable domain part on the owned sending domain", and this value has to survive
+   * the migration off gmail.com unchanged or every historical Message-ID stops being
+   * reconstructible from its `SendAttempt`.
+   */
+  MESSAGE_ID_DOMAIN: z.string().min(1).default('aryamanj.in'),
+
+  /**
    * D4 tier 3. Absent means escalation is disabled: B6a's credits were unclaimed
    * at F2, and H9's rule for optional capability applies — the pipeline must be
    * correct with it missing, never broken by its absence.
