@@ -1,6 +1,6 @@
 import type { InboundMessage, MailProvider, OutboundMessage, ProviderMessageRef } from '../../core/interfaces/providers.js'
 import { buildRawMessage } from './mime.js'
-import { deriveMessageId, syntheticProviderId } from './message-id.js'
+import { deriveMessageId, deriveOutreachRef, outreachRefOf, syntheticProviderId } from './message-id.js'
 import { AmbiguousSendError } from './gmail.js'
 
 /**
@@ -13,11 +13,7 @@ import { AmbiguousSendError } from './gmail.js'
  * *"a crash mid-send issues no second send"* and a fake that quietly behaves better
  * than Gmail proves nothing. Two rules follow, and both are the point of this file:
  *
- * 1. **It models the provider's Message-ID behaviour as a parameter**, not as an
- *    assumption. `preservesMessageId` defaults to whatever the live probe measured;
- *    a test can flip it and assert the reconciliation still works. A fake hard-coded
- *    to preserve the id would make the double-send test pass on a provider that
- *    rewrites it.
+_PLACEHOLDER_
  * 2. **It can fail ambiguously on demand.** `failNextSendAmbiguously()` delivers the
  *    message and then throws, which is the exact shape of a lost response — the state
  *    that A9 exists for and the one a naive fake never produces.
@@ -29,6 +25,8 @@ export type FakeSentMessage = {
   rfc822MessageId: string
   /** What the provider stored, which is not necessarily what we asked for. */
   storedMessageId: string
+  /** The `X-Outreach-Ref` the provider kept, or null if it stripped it. */
+  storedOutreachRef: string | null
   to: string
   subject: string
   bodyText: string
@@ -41,11 +39,16 @@ export type FakeMailOptions = {
   /**
    * Whether the provider keeps a client-supplied `Message-ID`.
    *
-   * Deliberately explicit rather than defaulted-true. See the class comment: the whole
-   * risk in A9 is a provider that rewrites it, and a fake that cannot express that
-   * case cannot test the thing that matters.
+   * **Defaults to false, because Gmail does not keep it.** Nothing in the
+   * reconciliation reads it any more; it is modelled so `storedMessageId` stays honest.
    */
   preservesMessageId?: boolean
+  /**
+   * Whether the provider keeps the `X-Outreach-Ref` header the reconciliation matches
+   * on. Defaults to true — measured. Set false to assert that a provider which strips
+   * it still cannot cause a double send.
+   */
+  preservesOutreachRef?: boolean
 }
 
 export class FakeMailProvider implements MailProvider {
@@ -58,10 +61,12 @@ export class FakeMailProvider implements MailProvider {
   private readonly inbound: InboundMessage[] = []
   private readonly messageIdDomain: string
   private readonly preservesMessageId: boolean
+  private readonly preservesOutreachRef: boolean
 
   constructor(opts: FakeMailOptions = {}) {
     this.messageIdDomain = opts.messageIdDomain ?? 'owned.example'
-    this.preservesMessageId = opts.preservesMessageId ?? true
+    this.preservesMessageId = opts.preservesMessageId ?? false
+    this.preservesOutreachRef = opts.preservesOutreachRef ?? true
   }
 
   /**
@@ -98,6 +103,7 @@ export class FakeMailProvider implements MailProvider {
       subject: m.subject,
       bodyText: m.bodyText,
       messageId: derived,
+      outreachRef: deriveOutreachRef(idempotencyKey),
       ...(m.inReplyToMessageId ? { inReplyTo: m.inReplyToMessageId } : {}),
     })
 
@@ -108,6 +114,7 @@ export class FakeMailProvider implements MailProvider {
       storedMessageId: this.preservesMessageId
         ? derived
         : `<rewritten.${syntheticProviderId()}@mail.provider.invalid>`,
+      storedOutreachRef: this.preservesOutreachRef ? deriveOutreachRef(idempotencyKey) : null,
       to: m.to,
       subject: m.subject,
       bodyText: m.bodyText,
@@ -124,10 +131,12 @@ export class FakeMailProvider implements MailProvider {
   }
 
   async findByMessageId(messageId: string): Promise<ProviderMessageRef | null> {
-    // Matches on what the provider STORED, exactly as `rfc822msgid:` does. When
-    // `preservesMessageId` is false this returns null for a message that really was
-    // sent — which is the failure mode the probe exists to rule out, reproduced.
-    const hit = this.sent.find((s) => s.storedMessageId === messageId)
+    // Matches on the HEADER the provider kept, which is what the Gmail implementation
+    // does and for the same measured reason. With `preservesOutreachRef: false` this
+    // returns null for a message that really was sent — the residual failure mode, and
+    // the assertion is that even then no second send is issued.
+    const ref = outreachRefOf(messageId)
+    const hit = this.sent.find((s) => s.storedOutreachRef !== null && s.storedOutreachRef === ref)
     return hit ? { providerMessageId: hit.providerMessageId, threadId: hit.threadId } : null
   }
 

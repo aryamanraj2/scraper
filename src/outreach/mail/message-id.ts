@@ -40,8 +40,22 @@ import { createHash, randomUUID } from 'node:crypto'
 const LOCAL_PREFIX = 'oi'
 
 export function deriveMessageId(idempotencyKey: string, domain: string): string {
+  return `<${deriveOutreachRef(idempotencyKey)}@${domain}>`
+}
+
+/**
+ * The same derivation without the angle brackets or the domain — the value of the
+ * `X-Outreach-Ref` header.
+ *
+ * A9 assumed the `Message-ID` we set would be the id that exists afterwards. Measured
+ * against Gmail on 2026-09-11, it is not: the API replaces it and keeps no original.
+ * So the handle moved to a header we control, and this is it. It is still a pure
+ * function of the idempotency key, which is the property the whole design rests on —
+ * a crashed attempt is recoverable from its stored row alone.
+ */
+export function deriveOutreachRef(idempotencyKey: string): string {
   const digest = createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 32)
-  return `<${LOCAL_PREFIX}.${digest}@${domain}>`
+  return `${LOCAL_PREFIX}.${digest}`
 }
 
 /**
@@ -81,4 +95,17 @@ export function deriveIdempotencyKey(parts: {
  */
 export function syntheticProviderId(): string {
   return randomUUID().replace(/-/g, '').slice(0, 16)
+}
+
+/**
+ * The `X-Outreach-Ref` value carried by a derived Message-ID — its local part.
+ *
+ * `<oi.abc123@aryamanj.in>` -> `oi.abc123`. Lets a caller hold D5's
+ * `findByMessageId(messageId)` shape while the reconciliation matches on the header
+ * that actually survives the provider.
+ */
+export function outreachRefOf(messageId: string): string {
+  const inner = messageId.replace(/^</, '').replace(/>$/, '')
+  const at = inner.lastIndexOf('@')
+  return at === -1 ? inner : inner.slice(0, at)
 }

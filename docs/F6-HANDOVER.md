@@ -2,8 +2,9 @@
 
 **Written:** 2026-09-11, at the end of the F5 session.
 **For:** the next implementation session, which builds F6 and nothing else.
-**Status of the repo when this was written:** F5 complete, 537 tests passing, typecheck
-and lint clean. F0–F4 committed; **all of F5 is uncommitted.**
+**Status of the repo when this was written:** F5 complete, **15/15 exit criteria met**,
+538 tests passing, typecheck, lint and build clean. F0–F4 committed; **all of F5 is
+uncommitted.**
 
 > ### If you read nothing else
 >
@@ -18,8 +19,9 @@ and lint clean. F0–F4 committed; **all of F5 is uncommitted.**
 > 3. **The corpus was widened to 1,975 companies** during this session, by the
 >    operator. Scoring has **not** been re-run over the new 1,825, so every downstream
 >    number below still describes the old 150-company corpus.
-> 4. **F5's exit criteria are 15/15 only after a live `send:test`.** §2.3 records what
->    that measured, including the answer to the A9 question.
+> 4. **A9 does not hold on Gmail, and §2.3 is the measurement.** Gmail rewrites a
+>    client-supplied `Message-ID`, so the reconciliation matches an `X-Outreach-Ref`
+>    header instead. Read it before touching the send path.
 
 ---
 
@@ -36,6 +38,7 @@ and lint clean. F0–F4 committed; **all of F5 is uncommitted.**
 | `docs/F5-HANDOVER.md` | What F4 built, F4's twelve deviations, the Tier A yield number. | Yes |
 | `docs/F6-HANDOVER.md` | This file. What F5 actually built, its deviations, and the F6 task. | Yes |
 | `docs/handoff-llm-gateway.md` | How the LLM role works. Carries an **"As built (F5)"** section recording the one place F5 declined to use it, and why. | Yes |
+| `docs/F6-PREPROMPT.md` | The session prompt for F6. Says which of the above to read first and in what order. | Informational |
 | `README.md` | Setup and the things that bite. | Informational |
 
 Do not redesign the plan. Do not weaken its safeguards. Do not introduce scraping of
@@ -60,7 +63,8 @@ Unchanged, and all of them now have F0–F5 code standing on them:
    outreach case.
 4. **Every network request goes through `FetchPolicyGate`** — including, as of F5, the
    mail transport. `gmail.googleapis.com` and `oauth2.googleapis.com` are ordinary
-   allowlist entries with a published rate override, exactly as `api.firecrawl.dev` is.
+   allowlist entries, exactly as `api.firecrawl.dev` is — and carry no rate override,
+   because an override can only ever slow us down (§4.10).
 5. **Provenance on every fact, on both sides, per sentence.**
 6. **Every message needs individual human approval.** §1.6 is unamended. There is
    deliberately no bulk approval form and `send:run` has deliberately no `--all`.
@@ -87,7 +91,7 @@ stated edge over template spray.
 ### F5 is complete
 
 ```
-npm test          → 38 files, 537 tests passed
+npm test          → 38 files, 538 tests passed
 npm run typecheck → clean (backend and UI configs both)
 npm run lint      → clean
 npm run verify:f0 → 4/4     npm run verify:f1 → 7/7
@@ -98,7 +102,8 @@ npm run verify:f4 → 13/13   npm run verify:f5 → 15/15
 | F5 exit criterion | Evidence |
 |---|---|
 | Verified sends to owned inboxes only | The send gate's tenth condition. Demonstrated against the live database: the one approved draft, to `info@nanonets.com`, is refused with `recipient_not_owned` even at `MILESTONE_STAGE=F5` with `SENDING_ENABLED=true` |
-| Deterministic `Message-ID` persisted before the call | `verify:f5` re-derives every stored `rfc822_message_id` from its idempotency key and compares |
+| Deterministic handle persisted before the call | `verify:f5` re-derives every stored `rfc822_message_id` from its idempotency key and compares. The handle the reconciliation actually matches on is derived from the same key (§2.3) |
+| A verified send to an owned inbox | Three, to `+f5a`/`+f5b`/`+f5c`, on 2026-09-11. The `send.test` audit row is what `verify:f5` reads |
 | Crash mid-send issues no second send | Part G's row 1, driven through the real `sendApprovedDraft` with the worker killed between the provider call and the outcome write. `test/policy/send-gate.test.ts` |
 | Same human never emailed twice in a cycle | D3's per-contact partial unique index, untouched by the slot change; plus the gate's readable refusal |
 | A soft bounce does not permanently suppress | A12. `test/policy/outcome-ingestion.test.ts`, and `verify:f5` re-checks it over stored rows |
@@ -120,7 +125,7 @@ npm run verify:f4 → 13/13   npm run verify:f5 → 15/15
 | `Contact` | 4 | 4 |
 | `Draft` | 4 (1 approved) | 4 (1 approved · 3 gate_failed) |
 | `CandidateProfile` | 0 | **1** |
-| `SendAttempt` | 0 | see §2.3 |
+| `SendAttempt` | 0 | 0 — `send:test` writes none, by design (§4.12) |
 
 **Read the corpus row carefully.** The operator ran §9.1's `--feed all` ingest during
 this session, so the universe is now 13× larger — and **`intel:run` has not been
@@ -137,29 +142,71 @@ actually read, 4 published a usable address, and not one published a dedicated
 recruiting alias.** All four are general `info@`/`hello@` inboxes. §10 carries this
 forward as the open question it still is.
 
-### 2.3 The live send, and the A9 measurement
+### 2.3 The live send, and the A9 measurement — **A9 does not hold on Gmail**
 
-> **STATUS AT THE TIME OF WRITING: not yet run.** The OAuth consent is an interactive
-> act the operator performs once (`npm run gmail:auth`), and it had not completed when
-> this section was drafted. `verify:f5` reports this criterion as **unmet** rather than
-> passing it silently — a verifier that passed a live-send criterion without a live
-> send would be exactly the empty panel B3 warns about.
->
-> When it runs, record here:
->
-> - whether Gmail **preserved** the client-supplied `Message-ID`, verbatim from
->   `send:test` output;
-> - the `rfc822msgid:` search result for the derived id;
-> - `X-Google-Original-Message-ID` if present;
-> - SPF / DKIM / DMARC as the receiving side reported them.
->
-> **If Gmail rewrites the Message-ID, A9 step 2 does not hold as written** and the
-> reconciliation must key on the returned provider message id plus a custom header we
-> control. That is a deviation from the plan and must be recorded with the output as
-> evidence. The risk is already pinned by a test:
-> `FakeMailProvider({ preservesMessageId: false })` reproduces exactly that failure,
-> and `test/policy/send-gate.test.ts` asserts that even then **no second send is
-> issued** — the reconciliation reports failure rather than guessing.
+Three diagnostics were sent to owned inboxes (`+f5a`, `+f5b`, `+f5c`) on 2026-09-11.
+The send, the From header, plus-address delivery and the body all worked first time.
+The reconciliation did not, and the reason is the most important finding in F5.
+
+**Gmail replaces a client-supplied `Message-ID` and keeps no original:**
+
+```
+we set:        <oi.90ffa8e402a69d41a19ec505ec038af2@aryamanj.in>
+Gmail stored:  <CAGBX58siJOdRioW4btcyYmV4-_oo5XFHkPNx+OMtpuvhVL46DQ@mail.gmail.com>
+x-google-original-message-id:  absent
+```
+
+So A9 step 2 — *"search the Sent mailbox for `rfc822msgid:<message-id>` before
+attempting another send"* — cannot work. The operator is on the API, and the search
+operator itself is fine; the id it would look for does not exist. Left as specified,
+**every reconciliation would report "not sent" for a message sitting in the
+recipient's inbox, and the retry would deliver a second copy** — exactly the failure
+A9 exists to prevent, and one that would have passed every test written against a fake
+that preserves the header.
+
+**A custom header does survive.** `X-Outreach-Ref`, carrying the same derivation,
+came back intact on the same account in the same run:
+
+```
+x-outreach-ref   oi.b0b677ec727c462e23b35ed377d7da1b
+```
+
+So the reconciliation is: a bounded candidate search (`in:sent`, the recipient, a short
+window) followed by an **exact match on that header**. The search is a filter, never
+the answer — Gmail exposes no `header:` operator, and it would be easy to assume a
+custom header lands in the full-text index and search the bare token, but relying on
+undocumented provider behaviour is what just cost A9 its mechanism. It is not done
+twice.
+
+Everything A9 actually depends on is intact: the handle is still a pure function of
+`SendAttempt.idempotencyKey`, still persisted before the API call, still recoverable
+from the stored row alone after a crash. **Only the field it lives in changed.**
+
+Final state, measured:
+
+```
+rfc822msgid: (A9 as written)  0 hit(s)  <- provider rewrote the Message-ID
+X-Outreach-Ref (as built)     1 hit(s)
+```
+
+`send:test` prints both, deliberately, so the deviation stays evidenced in the output
+rather than remembered in a comment.
+
+#### SPF / DKIM / DMARC — not applicable to the pilot, and a same-account test cannot show them
+
+Gmail merges a message sent to another address on the **same account** into one message
+carrying both `SENT` and `INBOX`, and short-circuits delivery. There is no
+`Authentication-Results` header, because no receiving server evaluated one.
+
+More important: the F5 handover's §8.5 item 2 asked for *"SPF, DKIM and DMARC `p=none`
+on the sending domain"*. **The operator changed the plan under it** — the pilot sends
+from a personal `gmail.com` mailbox, which Google already DKIM-signs and whose SPF and
+DMARC records are Google's. There is no sending domain of ours to configure, and
+nothing for F5 to verify. It becomes real at the Workspace migration on `aryamanj.in`
+around F6, which is the point at which those records are ours to set.
+
+To see `Authentication-Results` before then, send to an owned mailbox **on a different
+provider**: `npm run send:test -- --to <owned address not on this account>`.
 
 ### 2.4 Nothing about F5 is committed
 
@@ -495,33 +542,37 @@ The same trap caught two tests: `test/unit/stage-guard.test.ts` asserted the shi
 stage was below F5. Rewritten to the property that survives — **both factors are still
 required** — with a pointer to where the guard that replaced the stage guard now lives.
 
-### 4.10 The Gmail hosts are ordinary allowlist entries, and the rate override cites Google
+### 4.10 The Gmail hosts are ordinary allowlist entries — and a rate override cannot make us faster
 
 No exception was carved for the mail path. `gmail.googleapis.com` and
 `oauth2.googleapis.com` earn `HostPolicy` allow rows exactly as `api.firecrawl.dev` did
 in F2, and every mail request runs the same five-step preflight.
 
-Three things were verified rather than assumed, on 2026-09-11:
+Two things were verified rather than assumed, on 2026-09-11:
 
 - **Both hosts answer `robots.txt` with 404.** F1 §4.9 defines that as "no rules
   published", which is permission **only** for a host with an explicit allow entry —
-  which these have. Had it been a 5xx or a disallow, the mail path would have been
-  refused and the right answer would have been to stop, not to special-case it.
-- **The rate override is Google's own published number.** 6,000 quota units per minute
-  per user, and `messages.send` costs 100 — one send per second is the vendor's
-  ceiling. The override is 1,500 ms, recorded on the row with its source URL. This is
-  D4 step 4 working (*"a published rate limit always wins over our default"*), not a
-  bypass: the project default of 5,000 ms would refuse the reconciliation search that
-  has to follow a send, which is the gate stopping the safety mechanism rather than the
-  risk.
-- **`gmail.modify` is the minimum.** `gmail.send` cannot run the `rfc822msgid:` search
-  that makes A9 step 2 possible; `gmail.metadata` cannot read the bodies reply
+  which these have. Had it been a 5xx or a disallow, the right answer would have been
+  to stop, not to special-case it.
+- **`gmail.modify` is the minimum.** `gmail.send` cannot run the reconciliation search
+  that stops a double send; `gmail.metadata` cannot read the bodies reply
   classification needs; `https://mail.google.com/` includes permanent delete and would
   be asking for more than the job requires from what is also the operator's personal
   mailbox.
 
-`HostPolicy` gained the ability to carry a seeded rate override and its source URL, so
-an override is auditable as *"the vendor says this"* rather than *"someone chose this"*.
+**And a correction, because the first version of this was wrong.** A 1,500 ms
+`rateDelayMsOverride` was written on the reasoning that Google publishes 6,000 quota
+units per minute per user — with `messages.send` at 100 units, one send per second —
+so we could safely go faster than the project's 5,000 ms default. **An override cannot
+do that.** `effectiveDelayMs` returns `max(default, override, crawlDelay)`; its own
+contract says *"a published rate limit always wins over our default — never the other
+way round"*. The override was dead weight and has been removed, with the reason
+recorded on the entry so nobody adds it back.
+
+The effective spacing is therefore 5,000 ms, and the adapter waits it out between its
+own calls (§4.14) rather than trying to shorten it. At ≤20 sends/day a five-second gap
+costs nothing, and shortening it would mean reaching past the limiter — which is
+evading a rate limit (`handover.md` §1.5).
 
 ### 4.11 The OAuth loopback flow has no loopback server
 
@@ -572,6 +623,43 @@ headers and base64 for the body — the corpus is international, and an encoded-
 never applied inside `addr-spec`, which would produce a header that looks fine and
 routes nowhere.
 
+### 4.14 The reconciliation was refused by our own rate limiter, twice
+
+Found by running it, not by reading it, and worth both entries because the second
+failure was a different bug wearing the first one's clothes.
+
+**First failure.** `send:test` sent successfully and then threw:
+
+```
+GmailApiError: reconciliation search refused by FetchPolicyGate: rate_limited
+```
+
+The gate refuses a too-early request rather than queueing it, and the search follows
+the send by milliseconds. So A9 step 2 — the mechanism whose only job is to stop a
+double send — could not run at exactly the moment it is needed, because our own
+conservative rate policy had just been consumed by the send it exists to reconcile.
+This is F4 §4.1 one layer down: *"a refusal is about the host"* is true of
+`host_denied`, `robots_disallowed` and `terms_prohibited`, and **false of
+`rate_limited`**, which is about timing and expires on its own. The fix, there and
+here, is to wait.
+
+**Second failure, after the fix.** The adapter stamped its own clock when it *started*
+waiting, while the gate's `HostRateLimiter` stamps when the request is actually
+*issued* and measures the next window from there. A Gmail call takes 300–900 ms, so the
+200 ms of margin between our spacing and the gate's was eaten by the request itself and
+the next search was refused again. The clock is stamped on **completion** now
+(`markRequestDone`), which is strictly more conservative than the limiter — a margin
+rather than a race against how fast the API happens to be that day.
+
+**Generalise it:** two components that both measure "time since the last request" must
+agree on which instant that is, and the safe disagreement is the one where the caller
+is later than the enforcer.
+
+One thing was already right and is worth keeping right: the failure was **loud**.
+`findByMessageId` throws rather than returning `null`, because a `null` there means
+"not sent" and licenses another send. A reconciliation that could not look must never
+report that it looked and found nothing.
+
 ---
 
 ## 5. F5 as built — the map
@@ -597,8 +685,9 @@ src/apply/resumes/resumes-data.ts     MODIFIED: hostedUrl; linkUrl derived from 
 src/outreach/draft/approve.ts   MODIFIED: §4.2 — senderIdentity stored, not defaulted
 src/outreach/draft/hash.ts      MODIFIED: §4.4 — resumeLinkUrl in A7's input
 src/outreach/mail/
-  message-id.ts                 A9's deterministic derivation, and the search term
-  mime.ts                       RFC 5322 by hand; refuses header injection (§4.13)
+  message-id.ts                 A9's deterministic derivation, and X-Outreach-Ref
+  mime.ts                       RFC 5322 by hand; refuses header injection (§4.13);
+                                sets X-Outreach-Ref, the handle that survives (§2.3)
   oauth.ts                      installed-app flow, enveloped refresh token (§4.11)
   gmail.ts                      the MailProvider. Transport only — it decides nothing
   fake.ts                       the contract fake, which can rewrite a Message-ID
@@ -631,9 +720,10 @@ tools/
 **A message cannot reach anyone who is not an owned inbox**, and lifting that takes the
 stage *and* a flag.
 
-**A `SendAttempt` exists before the provider is called**, carrying the exact string the
-reconciliation will search for. A crash between the two leaves a row that says "a send
-may have gone out, and here is how to find out".
+**A `SendAttempt` exists before the provider is called**, carrying the key every
+reconciliation handle is derived from. A crash between the two leaves a row that says
+"a send may have gone out, and here is how to find out" — and on Gmail the handle is
+`X-Outreach-Ref`, not the `Message-ID` A9 named (§2.3).
 
 **Reconciliation never sends.** It holds no message — only an id to look for.
 

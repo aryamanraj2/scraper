@@ -78,23 +78,29 @@ export const SEED_ALLOW_HOSTS: SeedHostEntry[] = [
   //
   // Budget: the mail path declares `cost: 0`, which `checkBudget` short-circuits
   // before reading a row. A research cap must never abort an approved message.
+  //
+  // **No rate override on either**, and that is a correction rather than an omission.
+  //
+  // Google publishes 6,000 quota units per minute per user, and `messages.send` costs
+  // 100 — one send per second, which is *faster* than this project's 5,000 ms default.
+  // An override of 1,500 ms was written first and did nothing, because
+  // `effectiveDelayMs` returns `max(default, override, crawlDelay)`: the override is
+  // there so a host can slow us DOWN, never speed us up. Its own contract says so —
+  // "a published rate limit always wins over our default — never the other way round."
+  //
+  // So the effective spacing is 5,000 ms, the conservative default, and the mail
+  // adapter waits it out between its own calls rather than trying to shorten it
+  // (`GmailProvider.spaceRequests`). Waiting is the only correct response to a rate
+  // limit; reaching past the limiter would be evading one (`handover.md` §1.5).
   {
     host: 'gmail.googleapis.com',
     includeSubdomains: false,
-    // Published: 6,000 quota units per minute per user (= 100/second), and
-    // messages.send costs 100 units — so one send per second is the vendor's own
-    // ceiling. 1,500 ms sits under it with margin. Our 5,000 ms default would refuse
-    // the reconciliation search that has to follow a send (A9 step 2) with
-    // `rate_limited`, which is the gate stopping the safety mechanism rather than the
-    // risk.
-    rateDelayMsOverride: 1_500,
     sourceUrl: 'https://developers.google.com/workspace/gmail/api/reference/quota',
-    note: 'F5 mail transport: users.messages.send / list / get on the operator\'s own mailbox, gmail.modify scope. Rate override cites the published 6,000 units/min/user limit.',
+    note: 'F5 mail transport: users.messages.send / list / get on the operator\'s own mailbox, gmail.modify scope. No override: the published limit (1 send/sec) is looser than our 5s default, and an override can only ever be more conservative.',
   },
   {
     host: 'oauth2.googleapis.com',
     includeSubdomains: false,
-    rateDelayMsOverride: 1_000,
     sourceUrl: 'https://developers.google.com/identity/protocols/oauth2/native-app',
     note: 'F5: the OAuth 2.0 token endpoint. POST form-encoded only, through FetchPolicyGate.postForm, which audits no part of the body.',
   },

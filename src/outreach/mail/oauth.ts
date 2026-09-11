@@ -140,6 +140,19 @@ export async function exchangeConsentCode(
   secrets: SecretStore,
   opts: OAuthConfig & { code: string; redirectUri: string },
 ): Promise<{ scope: string | undefined; storedRefreshToken: boolean }> {
+  // **Prove we can store the token BEFORE spending the code.**
+  //
+  // A consent code is single-use and expires in minutes. The first version of this
+  // exchanged it and then called `secrets.put`, which is the natural order and is
+  // wrong: on a machine where the Keychain KEK had never been provisioned, the
+  // exchange succeeded, Google issued a refresh token, the store threw — and the code
+  // was burned, so the operator had to walk through the browser consent again to
+  // recover from a misconfiguration that was knowable a second earlier.
+  //
+  // The general shape: when a step consumes a single-use external resource, every
+  // precondition that can be checked locally must be checked first.
+  await secrets.assertWritable()
+
   const tokens = await postToken(gate, {
     code: opts.code,
     client_id: opts.clientId,

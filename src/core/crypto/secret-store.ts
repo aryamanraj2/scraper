@@ -23,6 +23,18 @@ export class SecretStore {
     private readonly keyProvider: KeyProvider,
   ) {}
 
+  /**
+   * Throws unless this store could seal a value right now.
+   *
+   * For callers whose next step consumes something single-use — an OAuth consent code
+   * is the case that motivated it — so that a missing KEK is reported before the
+   * resource is spent rather than after. Reads the key and discards it; it writes
+   * nothing and touches no row.
+   */
+  async assertWritable(): Promise<void> {
+    await this.keyProvider.getKek()
+  }
+
   async put(name: string, plaintext: string, actorId = 'system'): Promise<void> {
     const kek = await this.keyProvider.getKek()
     const envelope = seal(kek, Buffer.from(plaintext, 'utf8'))

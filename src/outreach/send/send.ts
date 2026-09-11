@@ -34,7 +34,7 @@ import { evaluateSendGate, type SendGateOptions, type SendPlan } from './gate.js
  *
  * `AmbiguousSendError` means the outcome is unknown: a timeout, a reset, a 5xx, a 429,
  * or a 200 whose body we could not read. The response is **never** another send. The
- * `rfc822msgid:` search runs first, and only a miss permits the attempt to be recorded
+ * reconciliation runs first, and only a miss permits the attempt to be recorded
  * as failed — at which point a human, or a later retry, may try again against a
  * row that now truthfully says nothing was delivered.
  *
@@ -121,7 +121,10 @@ export async function sendApprovedDraft(
         idempotencyKey: plan.idempotencyKey,
         // A9 step 3: persisted BEFORE the API call so it survives a crash between
         // derivation and transmission. It is also derivable again from the key, which
-        // is belt and braces on purpose — this is the string the reconciliation needs.
+        // is belt and braces on purpose. Note Gmail does NOT keep this header — the
+        // reconciliation matches on the `X-Outreach-Ref` derived from the same key
+        // (gmail.ts) — so this column records what we SET, which is still the string
+        // every recovery path starts from.
         rfc822MessageId: plan.rfc822MessageId,
         status: 'in_flight',
       },
@@ -230,10 +233,15 @@ export async function reconcileAttempt(
 ): Promise<SendOutcome> {
   const attempt = await db.sendAttempt.findUniqueOrThrow({
     where: { id: attemptId },
-    select: { draftId: true },
+    select: { draftId: true, contact: { select: { emailNormalized: true } } },
   })
 
-  const found = await mail.findByMessageId(rfc822MessageId)
+  // The recipient narrows the provider's candidate search from "everything sent this
+  // week" to "the one message sent to this person". It is a hint, never a filter the
+  // answer depends on: a provider that keeps the Message-ID ignores it.
+  const found = await mail.findByMessageId(rfc822MessageId, {
+    to: attempt.contact?.emailNormalized,
+  })
   if (found) {
     // The send landed and the response was lost. Record it and stop.
     await markSent(db, attemptId, attempt.draftId, found.providerMessageId, found.threadId ?? null, true)

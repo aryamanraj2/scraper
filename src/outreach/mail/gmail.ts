@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import type { FetchPolicyGate } from '../../core/policy/fetch-policy-gate.js'
-import type { InboundMessage, MailProvider, OutboundMessage } from '../../core/interfaces/providers.js'
-import { buildRawMessage, toBase64Url } from './mime.js'
-import { deriveMessageId, rfc822MsgIdQuery } from './message-id.js'
+import type { InboundMessage, MailProvider, OutboundMessage, ProviderMessageRef } from '../../core/interfaces/providers.js'
+import { buildRawMessage, toBase64Url, OUTREACH_REF_HEADER } from './mime.js'
+import { deriveMessageId, deriveOutreachRef, outreachRefOf, rfc822MsgIdQuery } from './message-id.js'
 import type { GmailTokenProvider } from './oauth.js'
 
 /**
@@ -108,9 +108,29 @@ export type GmailProviderOptions = {
   messageIdDomain: string
   /** Bytes ceiling for a message read. Bodies are small; a runaway one is a bug. */
   maxBytes?: number
+  /**
+   * Spacing between this provider's own consecutive API calls, in ms.
+   *
+   * Must exceed the gate's EFFECTIVE delay for `gmail.googleapis.com`, which is
+   * `max(DEFAULT_HOST_RATE_DELAY_MS, override, crawlDelay)` — 5,000 ms by default. A
+   * first attempt set this to 1,700 on the assumption that a host override could make
+   * us faster; it cannot (see `host-lists.ts`), and the reconciliation search was
+   * refused a second time.
+   */
+  interRequestDelayMs?: number
+  /**
+   * How far back the reconciliation looks for a candidate. Two days covers a crash the
+   * operator did not notice over a weekend; longer only costs candidates to sift.
+   */
+  reconcileWindowDays?: number
 }
 
+/** Above the 5,000 ms default spacing in `.env`'s `DEFAULT_HOST_RATE_DELAY_MS`. */
+const DEFAULT_INTER_REQUEST_DELAY_MS = 5_200
+
 export class GmailProvider implements MailProvider {
+  private lastRequestAt = 0
+
   constructor(
     private readonly gate: FetchPolicyGate,
     private readonly tokens: GmailTokenProvider,
@@ -119,6 +139,64 @@ export class GmailProvider implements MailProvider {
 
   private async authHeaders(): Promise<Record<string, string>> {
     return { authorization: `Bearer ${await this.tokens.accessToken()}` }
+  }
+
+  /**
+   * Waits out the per-host rate window before issuing a request.
+   *
+   * ## Why this exists, and why waiting is the only correct answer
+   *
+   * The first live run of `send:test` sent successfully and then **threw** on the
+   * reconciliation search:
+   *
+   * ```
+   * GmailApiError: reconciliation search refused by FetchPolicyGate: rate_limited
+   * ```
+   *
+   * The gate refuses a too-early request rather than queueing it, and the search
+   * follows the send by milliseconds. So A9 step 2 — the mechanism whose entire job is
+   * to stop a double send after an ambiguous failure — was unable to run at exactly
+   * the moment it is needed, because our own conservative rate policy had just been
+   * consumed by the send it is meant to reconcile.
+   *
+   * This is F4 §4.1 one layer down, and that entry already wrote the rule: the "a
+   * refusal is about the host, so every other path would refuse identically" reasoning
+   * is true of `host_denied`, `robots_disallowed` and `terms_prohibited`, and **false
+   * of `rate_limited`**, which is a statement about *timing* and expires on its own.
+   * `src/ingest/ats/detect.ts` and the F4 curator both carry the same fix.
+   *
+   * The response is to **wait**. Retrying immediately, or reaching past the limiter
+   * with a raw client, would be evading a rate limit — `handover.md` §1.5, and the one
+   * rule this project treats as having no engineering trade-off.
+   *
+   * Note the failure was loud rather than silent, which is the part that was already
+   * right: `findByMessageId` throws instead of returning `null`, because a `null` here
+   * means "not sent" and licenses another send. A reconciliation that cannot look must
+   * never report that it looked and found nothing.
+   */
+  private async spaceRequests(): Promise<void> {
+    const spacing = this.opts.interRequestDelayMs ?? DEFAULT_INTER_REQUEST_DELAY_MS
+    const elapsed = Date.now() - this.lastRequestAt
+    if (this.lastRequestAt !== 0 && elapsed < spacing) {
+      await new Promise((resolve) => setTimeout(resolve, spacing - elapsed))
+    }
+  }
+
+  /**
+   * Stamps the clock **after** a request completes, not before it starts.
+   *
+   * The second version of this got it wrong and a live run caught it: `spaceRequests`
+   * stamped on entry, while the gate's `HostRateLimiter` stamps when the request is
+   * actually issued and measures the next window from there. A Gmail call takes 300-900
+   * ms, so the 200 ms of margin between our 5,200 and the gate's 5,000 was consumed by
+   * the request itself and the following search was refused `rate_limited` again.
+   *
+   * Measuring from completion is strictly more conservative than the limiter, which
+   * makes the margin a real margin rather than a race against how fast the API happens
+   * to be today.
+   */
+  private markRequestDone(): void {
+    this.lastRequestAt = Date.now()
   }
 
   /**
@@ -137,16 +215,19 @@ export class GmailProvider implements MailProvider {
       subject: m.subject,
       bodyText: m.bodyText,
       messageId,
+      outreachRef: deriveOutreachRef(idempotencyKey),
       ...(m.inReplyToMessageId ? { inReplyTo: m.inReplyToMessageId } : {}),
     })
 
     let result: Awaited<ReturnType<FetchPolicyGate['postJson']>>
     try {
+      await this.spaceRequests()
       result = await this.gate.postJson(
         `${API_BASE}/messages/send`,
         { raw: toBase64Url(raw) },
         { companyId: null, cost: 0, headers: await this.authHeaders() },
       )
+      this.markRequestDone()
     } catch (err) {
       // A transport throw is the ambiguous case by definition: undici raises on a
       // timeout or a reset, and neither tells us whether Gmail accepted the message
@@ -180,28 +261,68 @@ export class GmailProvider implements MailProvider {
   }
 
   /**
-   * A9 step 2 — the reconciliation search, and the reason the scope is `gmail.modify`.
+   * A9 step 2 — the reconciliation, **not** as A9 specifies it, because A9's mechanism
+   * does not exist on this provider.
    *
-   * Searches the whole mailbox rather than filtering to `in:sent`. A message we sent
-   * is in Sent, and adding the filter would only create a way for the search to miss
-   * it — a label applied late, a filter the operator wrote, a message also in a
-   * thread. A miss here is the dangerous direction: it says "not sent" and licenses a
-   * second send. `includeSpamTrash=true` is set for the same reason.
+   * ## What was measured, on 2026-09-11, against the real account
+   *
+   * A9 says to derive a deterministic `Message-ID`, set it in the raw MIME, and search
+   * `rfc822msgid:<id>` before considering another send. Gmail's API **replaces** the
+   * header:
+   *
+   * ```
+   * we set:       <oi.90ffa8e402a69d41a19ec505ec038af2@aryamanj.in>
+   * Gmail stored: <CAGBX58siJOdRioW4btcyYmV4-_oo5XFHkPNx+OMtpuvhVL46DQ@mail.gmail.com>
+   * x-google-original-message-id: absent
+   * ```
+   *
+   * The search operator is fine — the id it would look for simply does not exist. Left
+   * as specified, every reconciliation would report "not sent" for a message sitting in
+   * the recipient's inbox, and the retry would deliver a second copy. That is precisely
+   * the failure A9 exists to prevent, and it would have passed every test written
+   * against a fake that preserves the header.
+   *
+   * ## What replaces it
+   *
+   * A header we control. `X-Outreach-Ref` carries the same derivation and **does**
+   * survive — verified on the same account, same run. So:
+   *
+   *   1. a bounded candidate search (`in:sent`, the recipient, a short window), then
+   *   2. an **exact match on the header** of each candidate.
+   *
+   * The search is a filter, never the answer. Gmail exposes no `header:` operator, and
+   * it would be easy to guess that a custom header lands in the full-text index and
+   * search for the bare token — but relying on undocumented provider behaviour is
+   * exactly what just cost A9 its mechanism, so this does not do it twice.
+   *
+   * Everything A9 actually depends on is intact: the handle is still a pure function of
+   * `SendAttempt.idempotencyKey`, still persisted before the API call, and still
+   * recoverable from the stored row alone after a crash.
+   *
+   * `messageId` is accepted in D5's shape; the ref is its local part.
    */
-  async findByMessageId(messageId: string): Promise<{ providerMessageId: string; threadId?: string } | null> {
-    const params = new URLSearchParams({
-      q: rfc822MsgIdQuery(messageId),
-      maxResults: '5',
-      includeSpamTrash: 'true',
-    })
+  async findByMessageId(
+    messageId: string,
+    hint: { to?: string | undefined; withinDays?: number } = {},
+  ): Promise<ProviderMessageRef | null> {
+    const ref = outreachRefOf(messageId)
+    const days = hint.withinDays ?? this.opts.reconcileWindowDays ?? 2
+    const parts = ['in:sent', `newer_than:${days}d`]
+    // Narrowing by recipient turns "every send this week" into "the one send to this
+    // person", which is the difference between a handful of reads and forty.
+    if (hint.to) parts.push(`to:${hint.to}`)
+
+    const params = new URLSearchParams({ q: parts.join(' '), maxResults: '25' })
+    await this.spaceRequests()
     const result = await this.gate.fetchText(`${API_BASE}/messages?${params.toString()}`, {
       companyId: null,
       cost: 0,
       headers: await this.authHeaders(),
     })
+    this.markRequestDone()
     if (!result.ok) {
-      // Never report "not found" from a refusal. A null here licenses another send,
-      // so the only safe answer to "we could not look" is to raise.
+      // Never report "not found" from a refusal. A null here licenses another send, so
+      // the only safe answer to "we could not look" is to raise.
       throw new GmailApiError(`reconciliation search refused by FetchPolicyGate: ${result.reason}`, null)
     }
     if (result.response.statusCode !== 200) {
@@ -214,13 +335,88 @@ export class GmailProvider implements MailProvider {
     const parsed = ListResponse.safeParse(JSON.parse(result.response.body))
     if (!parsed.success) throw new GmailApiError('unrecognised list response', 200)
 
-    const hit = parsed.data.messages?.[0]
-    if (!hit) return null
-    return { providerMessageId: hit.id, threadId: hit.threadId }
+    for (const candidate of parsed.data.messages ?? []) {
+      const message = await this.getMessage(candidate.id)
+      if (message.headers[OUTREACH_REF_HEADER.toLowerCase()] === ref) {
+        return { providerMessageId: message.id, threadId: message.threadId }
+      }
+    }
+    return null
+  }
+
+  /**
+   * A9 **as originally specified**, kept solely so the deviation stays evidenced.
+   *
+   * Returns what `rfc822msgid:<derived-id>` finds. On Gmail that is always nothing,
+   * because the API replaces the header — `send:test` prints this beside the header
+   * search so the reason for the deviation is visible in the output rather than only
+   * in a comment.
+   */
+  async findByRfc822MsgId(messageId: string): Promise<ProviderMessageRef[]> {
+    const params = new URLSearchParams({
+      q: rfc822MsgIdQuery(messageId),
+      maxResults: '10',
+      includeSpamTrash: 'true',
+    })
+    await this.spaceRequests()
+    const result = await this.gate.fetchText(`${API_BASE}/messages?${params.toString()}`, {
+      companyId: null,
+      cost: 0,
+      headers: await this.authHeaders(),
+    })
+    this.markRequestDone()
+    if (!result.ok || result.response.statusCode !== 200) return []
+    const parsed = ListResponse.safeParse(JSON.parse(result.response.body))
+    if (!parsed.success) return []
+    return (parsed.data.messages ?? []).map((m) => ({ providerMessageId: m.id, threadId: m.threadId }))
+  }
+
+  /**
+   * Every copy of a message carrying our `X-Outreach-Ref`, across all labels.
+   *
+   * For the diagnostic, not for the reconciliation. A message sent to an address on
+   * the same account exists twice — the SENT copy and the delivered copy — and only
+   * the delivered one carries `Authentication-Results`, because SPF, DKIM and DMARC
+   * are conclusions the RECEIVING side reached. `findByMessageId` scopes to `in:sent`
+   * because A9 asks about what we sent; this deliberately does not.
+   */
+  async findAllByMessageId(
+    messageId: string,
+    hint: { to?: string | undefined; withinDays?: number } = {},
+  ): Promise<ProviderMessageRef[]> {
+    const ref = outreachRefOf(messageId)
+    const days = hint.withinDays ?? this.opts.reconcileWindowDays ?? 2
+    const parts = [`newer_than:${days}d`]
+    if (hint.to) parts.push(`to:${hint.to}`)
+
+    const params = new URLSearchParams({ q: parts.join(' '), maxResults: '25', includeSpamTrash: 'true' })
+    await this.spaceRequests()
+    const result = await this.gate.fetchText(`${API_BASE}/messages?${params.toString()}`, {
+      companyId: null,
+      cost: 0,
+      headers: await this.authHeaders(),
+    })
+    this.markRequestDone()
+    if (!result.ok) throw new GmailApiError(`search refused by FetchPolicyGate: ${result.reason}`, null)
+    if (result.response.statusCode !== 200) {
+      throw new GmailApiError(`search returned ${result.response.statusCode}`, result.response.statusCode)
+    }
+    const parsed = ListResponse.safeParse(JSON.parse(result.response.body))
+    if (!parsed.success) throw new GmailApiError('unrecognised list response', 200)
+
+    const out: ProviderMessageRef[] = []
+    for (const candidate of parsed.data.messages ?? []) {
+      const message = await this.getMessage(candidate.id)
+      if (message.headers[OUTREACH_REF_HEADER.toLowerCase()] === ref) {
+        out.push({ providerMessageId: message.id, threadId: message.threadId })
+      }
+    }
+    return out
   }
 
   /** One message, with headers and body, for reply and bounce classification. */
   async getMessage(providerMessageId: string): Promise<GmailMessage> {
+    await this.spaceRequests()
     const result = await this.gate.fetchText(
       `${API_BASE}/messages/${encodeURIComponent(providerMessageId)}?format=full`,
       {
@@ -230,6 +426,7 @@ export class GmailProvider implements MailProvider {
         maxBytes: this.opts.maxBytes ?? 1024 * 1024,
       },
     )
+    this.markRequestDone()
     if (!result.ok) throw new GmailApiError(`message read refused: ${result.reason}`, null)
     if (result.response.statusCode !== 200) {
       throw new GmailApiError(`message read returned ${result.response.statusCode}`, result.response.statusCode)
@@ -255,11 +452,13 @@ export class GmailProvider implements MailProvider {
     const out: InboundMessage[] = []
     for (const threadId of threadIds) {
       const params = new URLSearchParams({ q: `thread:${threadId}`, maxResults: '20' })
+      await this.spaceRequests()
       const result = await this.gate.fetchText(`${API_BASE}/messages?${params.toString()}`, {
         companyId: null,
         cost: 0,
         headers: await this.authHeaders(),
       })
+      this.markRequestDone()
       if (!result.ok || result.response.statusCode !== 200) continue
       const parsed = ListResponse.safeParse(JSON.parse(result.response.body))
       if (!parsed.success) continue
@@ -286,11 +485,13 @@ export class GmailProvider implements MailProvider {
    */
   async listInbox(query: string, maxResults = 25): Promise<Array<{ id: string; threadId: string }>> {
     const params = new URLSearchParams({ q: query, maxResults: String(maxResults) })
+    await this.spaceRequests()
     const result = await this.gate.fetchText(`${API_BASE}/messages?${params.toString()}`, {
       companyId: null,
       cost: 0,
       headers: await this.authHeaders(),
     })
+    this.markRequestDone()
     if (!result.ok) throw new GmailApiError(`inbox list refused: ${result.reason}`, null)
     if (result.response.statusCode !== 200) {
       throw new GmailApiError(`inbox list returned ${result.response.statusCode}`, result.response.statusCode)
@@ -316,6 +517,8 @@ export type GmailMessage = {
   labelIds: string[]
   receivedAt: Date
   fromIsSelf: boolean
+  /** Every header, lowercased key. The diagnostic reads Authentication-Results here. */
+  headers: Record<string, string>
 }
 
 function headerValue(
@@ -358,7 +561,10 @@ function toGmailMessage(raw: z.infer<typeof MessageResponse>): GmailMessage {
   const text: string[] = []
   if (raw.payload) collectText(raw.payload, text)
   const labelIds = raw.labelIds ?? []
+  const allHeaders: Record<string, string> = {}
+  for (const h of headers ?? []) allHeaders[h.name.toLowerCase()] = h.value
   return {
+    headers: allHeaders,
     id: raw.id,
     threadId: raw.threadId,
     from: headerValue(headers, 'From') ?? '',

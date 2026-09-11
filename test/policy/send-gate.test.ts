@@ -527,13 +527,29 @@ describe('A9 — a crash mid-send issues no second send', () => {
     expect(draft.approvalHash).not.toBeNull()
   })
 
-  it('a provider that REWRITES the Message-ID makes the reconciliation miss — pinned deliberately', async () => {
-    // This is the failure the live probe exists to rule out. If Gmail rewrites a
-    // client-supplied Message-ID, an rfc822msgid: search for our derived id returns
-    // nothing, the reconciliation concludes "not sent", and a retry would double-send.
-    // The fake can express that, so the risk is a test rather than a hope.
+  it('reconciles even though the provider rewrites the Message-ID — which Gmail does', async () => {
+    // The fake's DEFAULT is the measured Gmail behaviour: Message-ID rewritten,
+    // X-Outreach-Ref preserved. So this asserts the reconciliation works on the
+    // provider we actually send through, not on a hypothetical one.
     const { db, draftId } = await world()
-    const mail = new FakeMailProvider({ messageIdDomain: 'owned.example', preservesMessageId: false })
+    const mail = new FakeMailProvider({ messageIdDomain: 'owned.example' })
+    mail.failNextSendAmbiguously()
+
+    const result = await sendApprovedDraft(db, mail, draftId, baseOptions())
+    expect(mail.sent[0]!.storedMessageId).not.toBe(mail.sent[0]!.rfc822MessageId)
+    expect(result.status).toBe('sent')
+    if (result.status !== 'sent') throw new Error('unreachable')
+    expect(result.reconciled).toBe(true)
+    expect(mail.sendCalls).toBe(1)
+  })
+
+  it('a provider that strips the custom header too still cannot cause a double send', async () => {
+    // The residual risk once the Message-ID is known not to survive. If the handle is
+    // gone entirely the reconciliation genuinely cannot tell — and the requirement is
+    // that it reports failure rather than guessing, because a guess of "not sent" is
+    // what delivers a second copy.
+    const { db, draftId } = await world()
+    const mail = new FakeMailProvider({ messageIdDomain: 'owned.example', preservesOutreachRef: false })
 
     mail.failNextSendAmbiguously()
     const result = await sendApprovedDraft(db, mail, draftId, baseOptions())

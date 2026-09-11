@@ -53,8 +53,10 @@ freezes an `approval_hash` over A7's exact field list.
 
 **F5 makes sending possible, and keeps it off real people.** The Gmail adapter runs on
 `gmail.modify` through `FetchPolicyGate` like every other request; A9's deterministic
-`Message-ID` is derived from the idempotency key and persisted **before** the API call,
-so a crash mid-send reconciles with an `rfc822msgid:` search instead of sending twice.
+reconciliation handle is derived from the idempotency key and persisted **before** the
+API call, so a crash mid-send reconciles instead of sending twice. **A9's mechanism had
+to change:** Gmail rewrites a client-supplied `Message-ID`, measured live, so the handle
+is an `X-Outreach-Ref` header that survives — see `docs/F6-HANDOVER.md` §2.3.
 D6's send gate is one choke point evaluating eleven conditions in one transaction.
 Bounces classify hard or soft, and **a soft bounce stops the conversation without
 permanently suppressing anyone** (A12).
@@ -270,7 +272,7 @@ src/intel/signal-graph.ts     D4 source precedence as a hard floor
 src/apply/                    ApprovedClaim library, packet generation, the evidence viewer
 src/outreach/contacts/        the Tier A curator, the executive filter, the yield report
 src/outreach/draft/           the composer, the citation choke point, Quality Gate, approval_hash
-src/outreach/mail/            the Gmail adapter, the deterministic Message-ID, the MIME builder
+src/outreach/mail/            the Gmail adapter, the derived reconciliation handle, the MIME builder
 src/outreach/send/            D6's send gate, A9's idempotent send, caps, breaker, outcome ingestion
 test/fixtures/                real responses, captured through the gate
 tools/                        AST guard, verifiers, seeders, fixture recorder

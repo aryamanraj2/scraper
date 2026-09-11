@@ -75,6 +75,17 @@ const keyProvider =
     : new KeychainKeyProvider(config.KEYCHAIN_SERVICE, config.KEYCHAIN_ACCOUNT)
 const secrets = new SecretStore(db, keyProvider)
 
+// Checked before the URL is even printed, so a missing KEK is found before the
+// operator walks through a browser consent rather than after the code is spent.
+try {
+  await secrets.assertWritable()
+} catch (err) {
+  console.error(`\nCannot store a refresh token: ${(err as Error).message}\n`)
+  console.error('Fix that first — the consent code is single-use and expires in minutes.')
+  await disconnectPrisma()
+  process.exit(1)
+}
+
 const code = flag('code')
 
 if (flag('check') !== undefined || process.argv.includes('--check')) {

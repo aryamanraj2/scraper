@@ -122,20 +122,36 @@ export type InboundMessage = {
 }
 
 /**
- * A9. Gmail has no native idempotency-key parameter, so the key travels inside the
- * message: the implementation derives a deterministic RFC 5322 Message-ID from
- * `idempotencyKey` on the owned sending domain and sets it explicitly in the raw
- * MIME. Gmail must not generate one — a generated ID is unknowable after an
- * ambiguous failure, which is exactly when it is needed.
+ * A9. The provider has no idempotency-key parameter, so the key travels inside the
+ * message and the reconciliation looks for it afterwards.
  *
- * `findByMessageId` is the reconciliation search (`rfc822msgid:` over Sent) that a
- * retry runs BEFORE considering another send. It is the reason the required scope
- * is `gmail.modify`: `gmail.metadata` cannot read the bodies reply classification
- * needs, and a send-only scope cannot perform this search at all.
+ * A9 specifies that handle as a deterministic RFC 5322 `Message-ID` found with
+ * `rfc822msgid:`. **Measured against Gmail on 2026-09-11, that does not survive**: the
+ * API replaces the header and keeps no original, so a search for the id we set finds
+ * nothing and a reconciliation would report "not sent" for a delivered message. The
+ * handle is an `X-Outreach-Ref` header instead, which does survive — see
+ * `src/outreach/mail/gmail.ts`. Everything A9 depends on is unchanged: the handle is
+ * still a pure function of `idempotencyKey`, still persisted before the call, still
+ * recoverable from the stored row after a crash.
+ *
+ * `findByMessageId` is what a retry runs BEFORE considering another send. It is the
+ * reason the required scope is `gmail.modify`: `gmail.metadata` cannot read the
+ * bodies reply classification needs, and a send-only scope cannot search at all.
  */
 export interface MailProvider {
   send(m: OutboundMessage, idempotencyKey: string): Promise<ProviderMessageRef>
-  findByMessageId(messageId: string): Promise<ProviderMessageRef | null>
+  /**
+   * The ambiguous-failure reconciliation (A9 step 2).
+   *
+   * `hint` is optional and narrows a provider's candidate search — the Gmail
+   * implementation cannot use `rfc822msgid:` because Gmail rewrites the header, so it
+   * filters by recipient and window and then matches an `X-Outreach-Ref` it set
+   * itself. A provider that keeps the Message-ID ignores the hint entirely.
+   */
+  findByMessageId(
+    messageId: string,
+    hint?: { to?: string | undefined; withinDays?: number },
+  ): Promise<ProviderMessageRef | null>
   listReplies(threadIds: string[]): Promise<InboundMessage[]>
 }
 

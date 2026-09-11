@@ -117,6 +117,33 @@ const secrets = new SecretStore(db, keyProvider)
 const tokens = new GmailTokenProvider(gate, secrets, { clientId, clientSecret })
 const mail = new GmailProvider(gate, tokens, { messageIdDomain: config.MESSAGE_ID_DOMAIN })
 
+// --probe measures a message already sent, without sending another. The A9 question
+// is about the provider, not about this invocation, so re-answering it costs an email
+// that nobody needs.
+// `--probe-id` reads ONE known message by its provider id and dumps every header.
+// It is the control for `--probe`: a search miss can mean the provider rewrote our
+// Message-ID, or that the query was wrong, or that the index had not caught up, and
+// those want three different responses. Reading the message settles it.
+const probeId = flag('probe-id')
+if (probeId) {
+  const message = await mail.getMessage(probeId)
+  console.log(`\nsend:test --probe-id ${probeId}  (no message will be sent)`)
+  console.log(`  labels: ${message.labelIds.join(',') || '-'}`)
+  for (const [name, value] of Object.entries(message.headers).sort()) {
+    console.log(`  ${name.padEnd(32)} ${value.slice(0, 300)}`)
+  }
+  await disconnectPrisma()
+  process.exit(0)
+}
+
+const probe = flag('probe')
+if (probe) {
+  console.log(`\nsend:test --probe ${probe}  (no message will be sent)`)
+  await reportOn(probe)
+  await disconnectPrisma()
+  process.exit(0)
+}
+
 // A synthetic key, marked as such, so nothing mistakes a diagnostic for a campaign
 // message if one ever turns up in a query.
 const idempotencyKey = `send-test:${new Date().toISOString()}:${to}`
@@ -160,40 +187,77 @@ await writeAudit(db, {
 // ---------------------------------------------------------------------------
 // The measurement A9 depends on.
 // ---------------------------------------------------------------------------
-console.log('\nA9 — does the derived Message-ID survive the send?')
-const found = await mail.findByMessageId(derivedMessageId)
-console.log(`  rfc822msgid: search   ${found ? `HIT  ${found.providerMessageId}` : 'MISS'}`)
-if (found && found.providerMessageId !== sent.providerMessageId) {
-  console.log(`  ⚠ the search matched a DIFFERENT message than the one just sent`)
-}
+await reportOn(derivedMessageId, sent.providerMessageId)
 
-const message = await mail.getMessage(sent.providerMessageId)
-console.log(`  stored Message-ID     ${message.rfc822MessageId ?? '(none)'}`)
-const preserved = message.rfc822MessageId === derivedMessageId
-console.log(`  preserved?            ${preserved ? 'YES' : 'NO'}`)
-if (!preserved) {
+/**
+ * Answers the one question A9 rests on, against the real provider.
+ *
+ * A message sent to an address on the same account exists TWICE — the SENT copy and
+ * the delivered copy — sharing one `Message-ID`. Only the delivered copy carries
+ * `Authentication-Results`, because SPF, DKIM and DMARC are conclusions the RECEIVING
+ * side reached. Reading them off the sent copy would report what we asserted rather
+ * than what was verified, which is not the same thing and is the weaker one.
+ */
+async function reportOn(messageId: string, sentProviderId?: string): Promise<void> {
+  console.log('\nA9 — can a delivered message be found again from its stored row alone?')
+
+  // Both halves are reported, because they answer different questions. The
+  // `rfc822msgid:` search is A9 AS SPECIFIED and is expected to miss on Gmail; the
+  // header search is what replaces it. Printing the miss keeps the deviation evidenced
+  // rather than remembered.
+  const byMsgId = await mail.findByRfc822MsgId(messageId)
+  console.log(`  rfc822msgid: (A9 as written)  ${byMsgId.length} hit(s)${byMsgId.length === 0 ? '  <- provider rewrote the Message-ID' : ''}`)
+
+  const hits = await mail.findAllByMessageId(messageId, { to: to ?? undefined, withinDays: 2 })
+  console.log(`  X-Outreach-Ref (as built)     ${hits.length} hit(s)`)
+  if (hits.length === 0) {
+    console.log('')
+    console.log('  MISS on BOTH. Neither the Message-ID nor the custom header survived, so a')
+    console.log('  reconciliation cannot tell a delivered message from a lost one. Do not enable')
+    console.log('  sending: the crash-mid-send path can only fail closed, never recover.')
+    return
+  }
+  if (sentProviderId && !hits.some((h) => h.providerMessageId === sentProviderId)) {
+    console.log('  ⚠ the search matched messages, but not the one just sent')
+  }
+
+  for (const hit of hits) {
+    const message = await mail.getMessage(hit.providerMessageId)
+    const copy = message.labelIds.includes('SENT') ? 'SENT copy' : 'delivered copy'
+    const stored = message.headers['message-id'] ?? '(none)'
+    console.log(`\n  ${copy}  (${hit.providerMessageId}, labels: ${message.labelIds.join(',') || '-'})`)
+    console.log(`    Message-ID                    ${stored}`)
+    console.log(`    preserved?                    ${stored === messageId ? 'YES' : 'NO'}`)
+    for (const name of ['x-google-original-message-id', 'in-reply-to', 'references', 'reply-to', 'from']) {
+      if (message.headers[name]) console.log(`    ${name.padEnd(29)} ${message.headers[name]}`)
+    }
+    const auth = message.headers['authentication-results']
+    if (auth) {
+      console.log(`    Authentication-Results`)
+      for (const part of auth.split(';')) console.log(`      ${part.trim()}`)
+    } else if (message.labelIds.includes('SENT') && message.labelIds.includes('INBOX')) {
+      // Measured 2026-09-11: Gmail merges a message sent to another address on the
+      // SAME account into one message carrying both labels, and short-circuits
+      // delivery — so there is no Authentication-Results to read, because no
+      // receiving server ever evaluated one.
+      console.log('    Authentication-Results        (none — same-account delivery is not evaluated)')
+    } else {
+      console.log('    Authentication-Results        (absent)')
+    }
+  }
+
   console.log('')
-  console.log('  A9 step 2 as written does not hold on this provider. The reconciliation')
-  console.log('  must key on the returned provider message id plus a custom header we control,')
-  console.log('  and the deviation must be recorded with this output as the evidence.')
+  console.log('  SPF / DKIM / DMARC')
+  console.log('    The pilot sends from a personal gmail.com mailbox through the Gmail API, so')
+  console.log('    the message is DKIM-signed by Google and SPF/DMARC are Google\'s own records.')
+  console.log('    There is no sending domain of ours to configure for the pilot, and a')
+  console.log('    same-account test cannot show Authentication-Results at all.')
+  console.log('')
+  console.log('    To see them, send to an owned mailbox on a DIFFERENT provider:')
+  console.log('      npm run send:test -- --to <an owned address not on this account>')
+  console.log('    That becomes required at the Workspace migration on the owned domain (F6),')
+  console.log('    which is the point at which SPF, DKIM and DMARC p=none are ours to set.')
+  console.log('')
 }
-
-console.log('\nDeliverability, as the RECEIVING side concluded it')
-const raw = message.bodyText
-const authResults = /^Authentication-Results:.*$/gim.exec(raw)?.[0]
-console.log(`  Authentication-Results  ${authResults ?? '(not present in the parsed parts — see below)'}`)
-console.log('')
-console.log('  Headers Gmail stored on the delivered copy:')
-for (const name of ['Message-ID', 'X-Google-Original-Message-ID', 'In-Reply-To', 'References']) {
-  const re = new RegExp(`^${name}:\\s*(.+)$`, 'im')
-  const hit = re.exec(raw)?.[1]
-  console.log(`    ${name.padEnd(30)} ${hit ?? '(absent)'}`)
-}
-console.log('')
-console.log('  SPF/DKIM/DMARC are asserted by the receiving server, so read them from the')
-console.log('  delivered copy in the mailbox if they are not visible above — Gmail does not')
-console.log('  always expose Authentication-Results through the API payload for a message it')
-console.log('  both sent and received.')
-console.log('')
 
 await disconnectPrisma()

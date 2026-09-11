@@ -33,10 +33,24 @@ export type RawMessageInput = {
   subject: string
   bodyText: string
   messageId: string
+  /**
+   * The value of `X-Outreach-Ref`, A9's reconciliation handle on a provider that
+   * rewrites `Message-ID` — measured, see `gmail.ts`.
+   *
+   * It carries the **derived id's local part only**, never the idempotency key itself.
+   * The key is `draftId:contactId:campaignCycle:touchNumber`, and putting internal row
+   * ids into a header a recipient can read would leak the shape of the database into
+   * every message for no benefit. The derived id is already a one-way hash of the key
+   * and is exactly as findable.
+   */
+  outreachRef?: string | undefined
   /** Set on a follow-up so it threads under the original (RFC 5322 §3.6.4). */
   inReplyTo?: string | undefined
   date?: Date
 }
+
+/** The custom header A9's reconciliation matches on. */
+export const OUTREACH_REF_HEADER = 'X-Outreach-Ref'
 
 export class HeaderInjectionError extends Error {
   constructor(field: string) {
@@ -117,6 +131,10 @@ export function buildRawMessage(input: RawMessageInput): string {
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',
   ]
+
+  if (input.outreachRef) {
+    headers.push(header(OUTREACH_REF_HEADER, input.outreachRef))
+  }
 
   if (input.inReplyTo) {
     // Both, per RFC 5322 §3.6.4: `In-Reply-To` is what most clients thread on and
