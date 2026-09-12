@@ -121,12 +121,34 @@ const db = prisma()
   // legitimate yc-oss host — so the GitHub adapter is matched by the API host it
   // would actually have to call.
   const OPTIONAL = /workable|adzuna|data\.gov\.in|datagovin|algolia|hn-hiring|bluesky|bsky|api\.github\.com/i
+  /**
+   * The host allow/deny lists are exempt, and only they.
+   *
+   * F5b added `apply.workable.com` to `SEED_ALLOW_HOSTS`, because huggingface.co's
+   * careers link redirects there and the gate was refusing the redirect with
+   * `host_denied` — so detection could not even record which vendor the company
+   * uses. An allow entry is a policy declaration: it grants permission to fetch a
+   * host, and grants nothing else. **No Workable adapter exists**, nothing parses a
+   * Workable payload, and no code path constructs a Workable URL.
+   *
+   * This check is a text grep, so it cannot tell a hostname in a constant from an
+   * adapter. Narrowing it to skip this one file is the smallest change that keeps
+   * it answering the question it was written to answer. What it gives up is
+   * covered twice over: `check:no-raw-http` proves no file outside
+   * `raw-client.ts` can reach the network at all, and the regex still runs over
+   * every other file in src/, which is where an adapter would have to live.
+   */
+  const POLICY_DECLARATION = /src\/core\/policy\/host-lists\.ts$/
   const offenders: string[] = []
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
       if (statSync(full).isDirectory()) walk(full)
-      else if (full.endsWith('.ts') && OPTIONAL.test(readFileSync(full, 'utf8'))) {
+      else if (
+        full.endsWith('.ts') &&
+        !POLICY_DECLARATION.test(full) &&
+        OPTIONAL.test(readFileSync(full, 'utf8'))
+      ) {
         offenders.push(relative(process.cwd(), full))
       }
     }
@@ -135,7 +157,10 @@ const db = prisma()
   checks.push({
     name: 'No optional adapter built',
     ok: offenders.length === 0,
-    detail: offenders.length === 0 ? 'src/ references no F2a source' : `found in: ${offenders.join(', ')}`,
+    detail:
+      offenders.length === 0
+        ? 'src/ references no F2a source outside the host allow list'
+        : `found in: ${offenders.join(', ')}`,
   })
 }
 

@@ -104,6 +104,37 @@ export const SEED_ALLOW_HOSTS: SeedHostEntry[] = [
     sourceUrl: 'https://developers.google.com/identity/protocols/oauth2/native-app',
     note: 'F5: the OAuth 2.0 token endpoint. POST form-encoded only, through FetchPolicyGate.postForm, which audits no part of the body.',
   },
+
+  // --- F5b: the seven `host_denied` redirect targets -------------------------
+  //
+  // F5a's seed ingest detected a board for 59 of 188 companies. Seven of the
+  // failures were one allow entry away from working: the company's own careers
+  // link 301s to a DIFFERENT registrable domain, the redirect is followed through
+  // the gate as it must be, and the gate refuses the new host because nothing has
+  // granted it. That is `derived_company` working as designed — an allow entry
+  // earned by normalizing hasura.io does not extend to promptql.io.
+  //
+  // Three of the seven point at Workday, Workable and param.ai, which this system
+  // has no adapter for, so an entry alone attaches no postings. It lets detection
+  // RECORD which vendor the company uses, which is the input to deciding which
+  // adapter to build next (F5a carry-forward #4). The other four are the company's
+  // own site under a new name.
+  //
+  // An allow entry is OUR permission, not the publisher's. robots, terms, rate and
+  // budget all still run at fetch time, and any of them can still refuse.
+  //
+  // Subdomains are included where the VENDOR puts the tenant in the hostname
+  // (`fractal.wd1.myworkdayjobs.com`, `practo.app.param.ai`) — an exact entry there
+  // would unblock exactly one company and teach nothing about the next one — and
+  // where a company's own domain may or may not serve `www`. Workable puts the
+  // tenant in the path, so its entry is exact.
+  { host: 'promptql.io', includeSubdomains: true, note: 'F5b: hasura.io/careers redirects here. Hasura rebranded to PromptQL; same company, new registrable domain.' },
+  { host: 'notion.com', includeSubdomains: true, note: 'F5b: notion.so redirects here. Same-company domain move, not a third party.' },
+  { host: 'jobs.twilio.com', includeSubdomains: false, note: 'F5b: stytch.com/careers redirects here following the acquisition. Twilio\'s own careers host.' },
+  { host: 'wise.jobs', includeSubdomains: true, note: 'F5b: wise.com/careers redirects here. Wise\'s own careers domain.' },
+  { host: 'myworkdayjobs.com', includeSubdomains: true, note: 'F5b: Workday-hosted boards, tenant in the hostname (e.g. fractal.wd1.myworkdayjobs.com). NO ADAPTER — detection records the vendor, nothing ingests postings.' },
+  { host: 'apply.workable.com', includeSubdomains: false, note: 'F5b: Workable-hosted boards, tenant in the path (e.g. /huggingface). NO ADAPTER — detection records the vendor only.' },
+  { host: 'param.ai', includeSubdomains: true, note: 'F5b: param.ai-hosted boards, tenant in the hostname (e.g. practo.app.param.ai). An India-native ATS, and the only one this corpus has surfaced. NO ADAPTER yet.' },
 ]
 
 /** Lowercased host with any port and trailing dot removed. */
