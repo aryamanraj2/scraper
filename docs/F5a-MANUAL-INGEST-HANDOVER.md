@@ -25,7 +25,7 @@ yielded 14.
 | — | `Opportunity.description` | Added. See §4 |
 | — | Per-company credit cap for qualified leads | Raised 20 → 200 (57 rows) |
 
-588 tests, typecheck and lint clean, `verify:f0` through `verify:f5` green.
+592 tests, typecheck and lint clean, `verify:f0` through `verify:f5` green.
 
 ## 3. SmartRecruiters is closed to us, and B7 needs amending for a different reason
 
@@ -65,7 +65,7 @@ Also checked, in case another host served the same data:
 public feed exists for Indian companies, it is that the vendor whose feed they use
 forbids automated access to it. The practical consequence is the same and the next move
 is unchanged — India needs its own source (Adzuna or data.gov.in) as its own gated
-mini-milestone, per carry-forward #4.
+mini-milestone, per carry-forward #3 in §10.
 
 ## 4. The posting body is now stored
 
@@ -195,13 +195,66 @@ it is run output). Causes seen live include `HTTP 403`, `robots_disallowed`,
 `no board signature` and `Headers Overflow Error` — four different problems that a
 "dropped 120 rows" summary would have flattened into one.
 
-### Seed result, live
+### Run result, live
 
 ```
 seen 188, created 170, updated 18, unchanged 0, skipped 0
-companies 1,975 -> 2,145
-India per-company envelopes at 45 credits (H5): 70
+companies      1,975 -> 2,145
+boards detected   59 / 188
+postings        2,086 -> 4,615   (+2,529, of which 2,528 carry a body)
+opportunities at Indian companies: 318
+global credits spent 5,907 -> 6,508 of 50,000
 ```
+
+**The detection split is the finding.** 54 of 117 non-India companies resolved a board;
+**5 of 71 Indian ones did.** That is B7's real shape stated as a number, and it is not
+about feeds being private — it is that Indian companies overwhelmingly are not on
+Greenhouse, Lever or Ashby at all.
+
+Detection failures, by cause, from `data/seed-ingest-report.csv`:
+
+| Cause | n | What it means |
+|---|---|---|
+| `no board signature` | 81 | Page read, no vendor link in it. Custom portal, or a JS-rendered board. |
+| `HTTP 404` | 18 | The domain resolves but `/careers` does not. Some are typos. |
+| `robots_disallowed` | 13 | Their robots says no. Nothing to do. |
+| `HTTP 403` | 7 | Bot-blocked at the edge (Flipkart, Swiggy, Persona). |
+| `host_denied` | 7 | See below — the most fixable group. |
+| `rate_limited` | 3 | Transient; a re-run picks them up. |
+
+**The 7 `host_denied` are one allow entry away from working.** Each is a company whose
+careers link points at a *different registrable domain*, so the redirect lands on a host
+with no allow entry and the gate refuses it — correctly, and exactly what following
+redirects through the gate is for:
+
+```
+hasura.io      -> promptql.io/careers            (rebrand)
+notion.so      -> www.notion.com                 (domain move)
+stytch.com     -> jobs.twilio.com/careers        (acquisition)
+wise.com       -> wise.jobs
+fractal.ai     -> fractal.wd1.myworkdayjobs.com  (Workday)
+practo.com     -> practo.app.param.ai/jobs       (param.ai)
+huggingface.co -> apply.workable.com/huggingface (Workable)
+```
+
+Three of those (Workday, param.ai, Workable) are ATS vendors this system has no adapter
+for, so an allow entry alone would not attach postings — but it would let detection
+*record what vendor they use*, which is the input to deciding which adapter is worth
+building next. The seed file's own `ats_guess` column already contains two `workday`
+guesses.
+
+**`ats_guess` vs the detector**: 7 disagreements out of 59 detections, every one of them
+the operator guessing Greenhouse where the company is actually on Ashby or Lever
+(`strava.com`, `render.com`, `clickhouse.com`, `sentry.io`, `fireworks.ai`,
+`zilliz.com`) or Ashby where it is Greenhouse (`trmlabs.com`). The guess column is worth
+keeping as a reporting hint and is worth nothing as a decision — which is why it never
+reaches `Company.atsSlug`.
+
+**`ios_android` is no longer empty.** 11 companies tagged `seed-track:ios_android` now
+carry postings, and the corpus contains real mobile titles for the first time — "Senior
+iOS Engineer", "Software Engineer II, iOS, Growth", "Senior/Software Engineer II,
+Android", "Mobile Engineering Manager". Whether any of them becomes a qualified lead on
+that track is `intel:run`'s question, not this milestone's.
 
 ## 7. `contacts:import`, in detail
 
@@ -291,10 +344,16 @@ discriminator that decides Evidence `sourceType` and whether `ycId` is claimed.
 2. **Backfill `Opportunity.description`** for the existing corpus. Needs a forced
    re-read; a plain `--postings-only` pass will report `content_unchanged` and write
    nothing.
-3. **India still needs its own source.** SmartRecruiters is closed (§3). Adzuna or
-   data.gov.in, as its own gated mini-milestone, never bolted into another.
-4. **Re-score the 170 newly seeded companies.** They are `normalized` with no research;
+3. **India still needs its own source**, and §6 now quantifies why: **5 boards from 71
+   Indian companies**, against 54 from 117 elsewhere. SmartRecruiters is closed (§3).
+   Adzuna or data.gov.in, as its own gated mini-milestone, never bolted into another.
+4. **Seven companies are one host allow entry from being detectable** — their careers
+   link redirects to a different registrable domain (§6). Three of the seven point at
+   Workday, Workable and param.ai, which have no adapter; an allow entry would still let
+   detection *record the vendor*, which is the input to deciding which adapter is worth
+   building. Cheap, and it is the only group of failures with a mechanical fix.
+5. **Re-score the 170 newly seeded companies.** They are `normalized` with no research;
    `intel:run` is what moves them, and whether any reaches the `ios_android` track is the
    question this milestone was built to answer.
-5. **Split the research budget counter** — unchanged from the F5 handover, and §5 is what
+6. **Split the research budget counter** — unchanged from the F5 handover, and §5 is what
    it costs when a free static fetch and a paid vendor credit share one envelope.
