@@ -165,16 +165,37 @@ export async function importContacts(
   } satisfies Record<ImportOutcome, number>
   for (const r of rows) counts[r.outcome] += 1
 
-  await writeAudit(db, {
-    actorType: 'user',
-    actorId: opts.operator,
-    action: 'contact.import_completed',
-    subjectType: 'ContactImport',
-    metadata: { file: filePath, provider: opts.provider, dryRun: opts.dryRun === true, ...counts },
-  })
+  // A dry run writes NOTHING, audit rows included. `audit_log` is the record of what
+  // the system did, and a preview did nothing; a refusal row for an address that was
+  // never imported is a decision that was never taken.
+  if (opts.dryRun !== true) {
+    await writeAudit(db, {
+      actorType: 'user',
+      actorId: opts.operator,
+      action: 'contact.import_completed',
+      subjectType: 'ContactImport',
+      metadata: { file: filePath, provider: opts.provider, ...counts },
+    })
+  }
 
   return { rows, counts }
 }
+
+/**
+ * Import refusals are recorded under their OWN action, not the curator's
+ * `contact.refused`.
+ *
+ * Not cosmetic. `tierAYield` counts `contact.refused` rows with no filter on who wrote
+ * them, so an import refusing one founder would have moved `executivesRejected` in the
+ * **Tier A** yield report — a statistic about what employer pages publish, shifted by a
+ * file nobody fetched. That is the same class of error §5 of this milestone's handover
+ * is about, and it would have been introduced by the fix for it.
+ *
+ * Separate actions also keep the two discovery methods independently countable, which
+ * is the entire reason `Contact.discoveryMethod` exists: bounce analysis has to be able
+ * to separate the methods rather than average them.
+ */
+const IMPORT_REFUSED = 'contact.import_refused'
 
 async function importRow(
   db: Db,
@@ -226,14 +247,16 @@ async function importRow(
   // Same rule as `curate.ts`, and it matters more here: a provider export mixes
   // personal accounts and other employers' addresses in a way a careers page does not.
   if (!isCompanyDomain(email, canonical.domain)) {
-    await writeAudit(db, {
-      actorType: 'user',
-      actorId: opts.operator,
-      action: 'contact.refused',
-      subjectType: 'Company',
-      subjectId: company.id,
-      metadata: { reason: 'off_domain', domain: canonical.domain, source: 'operator_import' },
-    })
+    if (opts.dryRun !== true) {
+      await writeAudit(db, {
+        actorType: 'user',
+        actorId: opts.operator,
+        action: IMPORT_REFUSED,
+        subjectType: 'Company',
+        subjectId: company.id,
+        metadata: { reason: 'off_domain', domain: canonical.domain },
+      })
+    }
     return {
       line: row.line,
       email,
@@ -247,19 +270,21 @@ async function importRow(
   const title = cell(row, 'title')
   const exec = isExecutiveContact(email, title)
   if (exec.isExecutive) {
-    await writeAudit(db, {
-      actorType: 'user',
-      actorId: opts.operator,
-      action: 'contact.refused',
-      subjectType: 'Company',
-      subjectId: company.id,
-      reasonCode: 'executive_only_contact',
-      // The address itself is NOT recorded, for the same reason `curate.ts` does not
-      // record it: handover.md §1.1 says never target them, and storing the address in
-      // an audit row so a later query could find it keeps exactly what the rule says
-      // not to keep.
-      metadata: { matched: exec.matched, where: exec.where, source: 'operator_import' },
-    })
+    if (opts.dryRun !== true) {
+      await writeAudit(db, {
+        actorType: 'user',
+        actorId: opts.operator,
+        action: IMPORT_REFUSED,
+        subjectType: 'Company',
+        subjectId: company.id,
+        reasonCode: 'executive_only_contact',
+        // The address itself is NOT recorded, for the same reason `curate.ts` does not
+        // record it: handover.md §1.1 says never target them, and storing the address
+        // in an audit row so a later query could find it keeps exactly what the rule
+        // says not to keep.
+        metadata: { matched: exec.matched, where: exec.where },
+      })
+    }
     return {
       line: row.line,
       email,

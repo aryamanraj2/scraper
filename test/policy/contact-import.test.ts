@@ -105,6 +105,23 @@ describe('contact import', () => {
     expect(JSON.stringify(audits[0]?.metadata)).not.toContain('ceo@zomato.com')
   })
 
+  /**
+   * `tierAYield` counts `contact.refused` rows with no filter on who wrote them, so an
+   * import refusing one founder would move `executivesRejected` in the **Tier A** yield
+   * report — a statistic about what employer pages publish, shifted by a file nobody
+   * fetched.
+   */
+  it('records its refusals under its own action, not the curator\'s', async () => {
+    await company()
+    await importContacts(testDb(), csv('zomato.com,ceo@zomato.com,,Chief Executive,,,,'), OPTS)
+
+    expect(await testDb().auditLog.count({ where: { action: 'contact.refused' } })).toBe(0)
+    expect(await testDb().auditLog.count({ where: { action: 'contact.import_refused' } })).toBe(1)
+
+    const { tierAYield } = await import('../../src/outreach/contacts/yield-report.js')
+    expect((await tierAYield(testDb())).executivesRejected).toBe(0)
+  })
+
   /** A `gmail.com` address is a personal account (§1.2); another company's is someone else's employee. */
   it('refuses an address off the company domain', async () => {
     await company()
@@ -212,15 +229,23 @@ describe('contact import', () => {
     expect(await testDb().contact.count()).toBe(1)
   })
 
-  it('writes nothing on a dry run', async () => {
+  /**
+   * Audit rows included. `audit_log` records what the system DID, and a preview did
+   * nothing — a refusal row for an address that was never imported is a decision that
+   * was never taken.
+   */
+  it('writes nothing at all on a dry run, audit rows included', async () => {
     await company()
-    const result = await importContacts(testDb(), csv('zomato.com,careers@zomato.com,,,,,,'), {
-      ...OPTS,
-      dryRun: true,
-    })
+    const result = await importContacts(
+      testDb(),
+      csv('zomato.com,careers@zomato.com,,,,,,', 'zomato.com,ceo@zomato.com,,Chief Executive,,,,'),
+      { ...OPTS, dryRun: true },
+    )
     expect(result.counts.imported).toBe(1)
+    expect(result.counts.executive).toBe(1)
     expect(await testDb().contact.count()).toBe(0)
     expect(await testDb().evidence.count()).toBe(0)
+    expect(await testDb().auditLog.count()).toBe(0)
   })
 
   it('reports a malformed row with its line number instead of shifting the columns', async () => {
