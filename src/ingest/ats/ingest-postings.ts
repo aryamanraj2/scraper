@@ -192,6 +192,13 @@ async function upsertPosting(
     title: posting.title,
     roleUrl: posting.url,
     location: posting.location,
+    // Stored, not discarded. F1 kept the title and threw the body away, which is why
+    // only 73 of 2,086 postings resolve a `roleTrackId` and why the Android-vs-iOS
+    // resume rule cannot work at all — see the column's comment in schema.prisma.
+    // An adapter that has no body for a posting writes null rather than an empty
+    // string, so "the board published nothing" stays distinguishable from "we did
+    // not ask".
+    description: posting.content === '' ? null : posting.content,
     postedAt: posting.postedAt,
     lastSeenAt: observedAt,
     closedAt: null,

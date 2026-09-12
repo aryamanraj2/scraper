@@ -693,6 +693,22 @@ model Opportunity {
   /// submits them.
   roleUrl      String?           @map("role_url")
   location     String?           @map("location")
+  /// The posting body as the ATS published it.
+  ///
+  /// Every one of the three adapters has always RETURNED this — Greenhouse inlines it
+  /// with `?content=true`, Lever as `descriptionPlain`, Ashby as `descriptionPlain` —
+  /// and F1 discarded it at the database boundary, keeping only the title. The
+  /// measured cost: 73 of 2,086 postings carry a `roleTrackId`, and none of the
+  /// corpus's early-career postings do, including an "AI/ML Research Internship" that
+  /// is exactly on target. A title alone cannot resolve a track, and it cannot decide
+  /// between the iOS and the Android resume either, because that distinction lives in
+  /// the requirements paragraph and never in the heading.
+  ///
+  /// Rows ingested before this column existed stay null until their board is next
+  /// refreshed and the posting's content hash moves. Nothing is backfilled by adding
+  /// the column: `postingContentHash` has always included `content`, so an unchanged
+  /// posting is still unchanged and still must not churn.
+  description  String?           @map("description") @db.Text
   remoteEvidenceId String?       @map("remote_evidence_id")
   /// A8: re-checked between approval and send. A draft approved Friday must not
   /// send Monday citing a closed req.

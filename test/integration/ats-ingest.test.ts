@@ -215,6 +215,44 @@ describe('ATS posting ingest', () => {
     // two rows alone.
     expect(signals[1]!.numericValue! - signals[0]!.numericValue!).toBe(3 - first.fetched)
   })
+
+  /**
+   * F1's measured mistake: the adapters have always returned the posting body —
+   * Greenhouse inlines it with `?content=true` — and the ingest discarded it, keeping
+   * only the title. 73 of 2,086 postings carry a `roleTrackId` as a result, none of
+   * the early-career ones do, and the Android-vs-iOS resume rule cannot work at all,
+   * because that distinction lives in the requirements paragraph and never in the
+   * heading.
+   */
+  it('stores the posting body, not only the title', async () => {
+    const company = await makeCompany()
+    await ingestPostings(testDb(), new GreenhouseProvider(boardFetcher()), {
+      id: company.id,
+      atsBoardToken: BOARD_TOKEN,
+    })
+
+    const opportunities = await testDb().opportunity.findMany({ where: { companyId: company.id } })
+    const withBody = opportunities.filter((o) => (o.description ?? '').length > 0)
+    expect(withBody.length).toBe(opportunities.length)
+    // A real Greenhouse description runs to thousands of characters. A title-length
+    // value here would mean the mapping picked up the wrong field.
+    expect(withBody[0]!.description!.length).toBeGreaterThan(200)
+  })
+
+  /** "The board published no body" must stay distinguishable from "we did not ask". */
+  it('writes null rather than an empty string when a posting has no body', async () => {
+    const company = await makeCompany()
+    const raw = JSON.parse(readFixture('greenhouse-jobs')) as { jobs: Record<string, unknown>[] }
+    raw.jobs = [{ ...raw.jobs[0]!, content: '' }]
+
+    await ingestPostings(testDb(), new GreenhouseProvider(boardFetcher(JSON.stringify(raw))), {
+      id: company.id,
+      atsBoardToken: BOARD_TOKEN,
+    })
+
+    const opportunity = await testDb().opportunity.findFirstOrThrow({ where: { companyId: company.id } })
+    expect(opportunity.description).toBeNull()
+  })
 })
 
 describe('ATS detection over the network path', () => {
