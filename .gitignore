@@ -78,6 +78,24 @@ prisma/*.db
 prisma/*.db-journal
 
 # ---------------------------------------------------------------------------
+# data/ — operator-authored inputs and the reports the runs produce
+#
+# `data/company-seed.csv` IS tracked: it is a hand-built list of companies, it is an
+# input the corpus cannot be reconstructed without, and it contains no personal data.
+#
+# Two things from that directory are not:
+#
+#   *-report.csv   run output. Regenerated on every `ingest:seed --from-file` and
+#                  every `contacts:import --report`, so committing it is churn.
+#   contacts*.csv  named individuals' work email addresses, gathered from a lookup
+#                  provider. `origin` is a public GitHub repository. A10 treats a
+#                  contact as personal data that must be erasable; a copy in git
+#                  history is the one place an erasure cannot reach.
+# ---------------------------------------------------------------------------
+data/*-report.csv
+data/contacts*.csv
+
+# ---------------------------------------------------------------------------
 # Editors and OS
 # ---------------------------------------------------------------------------
 .DS_Store

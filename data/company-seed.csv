@@ -1,0 +1,189 @@
+name,domain,hq_country,headcount_band,tracks,ats_guess,notes
+Zomato,zomato.com,India,5000+,ios_android|swe|ai_engineer,unknown,food delivery and dining app
+Swiggy,swiggy.com,India,5000+,ios_android|swe|ai_engineer,unknown,food delivery quick commerce
+Zepto,zeptonow.com,India,1000-5000,ios_android|swe,unknown,10 minute grocery delivery
+Meesho,meesho.com,India,1000-5000,ios_android|swe|ai_engineer,unknown,social commerce marketplace
+Nykaa,nykaa.com,India,1000-5000,ios_android|swe,unknown,beauty and fashion ecommerce
+Myntra,myntra.com,India,1000-5000,ios_android|swe|ai_engineer,unknown,fashion ecommerce platform
+Flipkart,flipkart.com,India,5000+,ios_android|swe|ai_engineer,unknown,ecommerce marketplace
+Urban Company,urbancompany.com,India,1000-5000,ios_android|swe,unknown,home services marketplace
+Rapido,rapido.bike,India,1000-5000,ios_android|swe,unknown,bike taxi ride hailing
+Ola,olacabs.com,India,5000+,ios_android|swe,unknown,ride hailing and mobility
+CRED,cred.club,India,1000-5000,ios_android|swe|ai_engineer,unknown,credit card payments rewards app
+Razorpay,razorpay.com,India,1000-5000,swe|ai_engineer,unknown,payments gateway and banking
+Zerodha,zerodha.com,India,1000-5000,ios_android|swe,unknown,discount stock broking platform
+Groww,groww.in,India,1000-5000,ios_android|swe,unknown,investing and stock broking app
+Jupiter,jupiter.money,India,200-1000,ios_android|swe,unknown,neobanking app
+slice,sliceit.com,India,200-1000,ios_android|swe,unknown,credit and payments app
+Navi,navi.com,India,1000-5000,ios_android|swe|ai_engineer,unknown,lending insurance mutual funds
+PhonePe,phonepe.com,India,5000+,ios_android|swe|ai_engineer,unknown,UPI payments super app
+Paytm,paytm.com,India,5000+,ios_android|swe,unknown,payments and financial services
+Cashfree,cashfree.com,India,200-1000,swe,unknown,payments and payouts API
+Setu,setu.co,India,50-200,swe,unknown,embedded finance API infrastructure
+Decentro,decentro.tech,India,50-200,swe,unknown,banking API infrastructure
+Fi Money,fi.money,India,200-1000,ios_android|swe,unknown,neobanking app for salaried
+INDmoney,indmoney.com,India,200-1000,ios_android|swe,unknown,wealth and investment tracking app
+Upstox,upstox.com,India,1000-5000,ios_android|swe,unknown,stock broking and investing
+Angel One,angelone.in,India,1000-5000,ios_android|swe,unknown,retail broking platform
+KreditBee,kreditbee.in,India,1000-5000,ios_android|swe,unknown,personal lending app
+Freshworks,freshworks.com,India,5000+,swe|ai_engineer,greenhouse,customer support CRM SaaS
+Zoho,zoho.com,India,5000+,swe,custom,business software suite
+Chargebee,chargebee.com,India,1000-5000,swe,greenhouse,subscription billing platform
+Postman,postman.com,India,1000-5000,swe,greenhouse,API development platform
+BrowserStack,browserstack.com,India,1000-5000,swe,greenhouse,cross browser testing cloud
+Hasura,hasura.io,India,200-1000,swe,greenhouse,GraphQL API engine
+Atlan,atlan.com,India,200-1000,swe|ai_engineer,unknown,data catalog and governance
+Whatfix,whatfix.com,India,1000-5000,swe,unknown,digital adoption platform
+LeadSquared,leadsquared.com,India,1000-5000,swe,unknown,sales CRM automation
+Darwinbox,darwinbox.com,India,1000-5000,swe,unknown,HR management SaaS
+MoEngage,moengage.com,India,1000-5000,swe|ai_engineer,unknown,customer engagement automation
+CleverTap,clevertap.com,India,200-1000,swe|ai_engineer,unknown,mobile marketing analytics
+Zluri,zluri.com,India,200-1000,swe,unknown,SaaS management platform
+Rocketlane,rocketlane.com,India,50-200,swe,unknown,customer onboarding platform
+Plivo,plivo.com,India,200-1000,swe,unknown,voice and SMS API
+Exotel,exotel.com,India,200-1000,swe,unknown,cloud telephony platform
+Sarvam AI,sarvam.ai,India,50-200,ai_engineer|swe,unknown,Indic language foundation models
+Krutrim,olakrutrim.com,India,200-1000,ai_engineer|swe,unknown,Indian AI models and cloud
+Haptik,haptik.ai,India,200-1000,ai_engineer|swe,unknown,conversational AI chatbots
+Uniphore,uniphore.com,India,1000-5000,ai_engineer|swe,unknown,conversational AI for enterprise
+Mad Street Den,madstreetden.com,India,200-1000,ai_engineer|swe,unknown,computer vision retail AI
+Fractal Analytics,fractal.ai,India,5000+,ai_engineer|swe,unknown,AI and analytics consulting
+Gupshup,gupshup.io,India,1000-5000,swe|ai_engineer,unknown,conversational messaging API
+Yellow.ai,yellow.ai,India,200-1000,ai_engineer|swe,unknown,enterprise AI agents
+ShareChat,sharechat.com,India,1000-5000,ios_android|swe|ai_engineer,unknown,Indic social media and Moj
+Dream11,dream11.com,India,1000-5000,ios_android|swe|ai_engineer,unknown,fantasy sports platform
+Games24x7,games24x7.com,India,1000-5000,ios_android|swe,unknown,online skill gaming
+Nazara Technologies,nazara.com,India,1000-5000,ios_android|swe,unknown,mobile gaming and esports
+Kuku FM,kukufm.com,India,200-1000,ios_android|swe,unknown,audio series and podcasts
+Pocket FM,pocketfm.com,India,1000-5000,ios_android|swe,unknown,audio series streaming
+PharmEasy,pharmeasy.in,India,1000-5000,ios_android|swe,unknown,online pharmacy and diagnostics
+Practo,practo.com,India,1000-5000,ios_android|swe,unknown,doctor booking and telehealth
+Cult.fit,cult.fit,India,1000-5000,ios_android|swe,unknown,fitness and wellness app
+Unacademy,unacademy.com,India,1000-5000,ios_android|swe,unknown,online learning platform
+PhysicsWallah,pw.live,India,5000+,ios_android|swe,unknown,affordable exam prep edtech
+Vedantu,vedantu.com,India,1000-5000,ios_android|swe,unknown,live online tutoring
+Scaler,scaler.com,India,1000-5000,swe,unknown,tech upskilling academy
+Delhivery,delhivery.com,India,5000+,swe|ai_engineer,unknown,logistics and supply chain
+Shiprocket,shiprocket.in,India,1000-5000,swe,unknown,ecommerce shipping aggregator
+Porter,porter.in,India,1000-5000,ios_android|swe,unknown,intracity logistics marketplace
+Locus,locus.sh,India,200-1000,swe|ai_engineer,unknown,supply chain route optimization
+NoBroker,nobroker.in,India,1000-5000,ios_android|swe,unknown,brokerage free real estate
+Ather Energy,atherenergy.com,India,1000-5000,ios_android|swe,unknown,electric scooters and charging
+Ultraviolette,ultraviolette.com,India,200-1000,ios_android|swe,unknown,electric motorcycles
+Duolingo,duolingo.com,USA,1000-5000,ios_android|swe|ai_engineer,greenhouse,language learning app
+Strava,strava.com,USA,200-1000,ios_android|swe,greenhouse,fitness tracking social app
+Whoop,whoop.com,USA,1000-5000,ios_android|swe,greenhouse,wearable fitness tracker
+Oura,ouraring.com,Finland,200-1000,ios_android|swe,greenhouse,smart ring health tracker
+Headspace,headspace.com,USA,200-1000,ios_android|swe,greenhouse,meditation and mindfulness app
+Calm,calm.com,USA,200-1000,ios_android|swe,greenhouse,sleep and meditation app
+Bending Spoons,bendingspoons.com,Italy,200-1000,ios_android|swe,custom,mobile app portfolio operator
+Raycast,raycast.com,UK,<50,ios_android|swe,ashby,macOS productivity launcher
+The Browser Company,thebrowser.company,USA,50-200,ios_android|swe,ashby,Arc and Dia browsers
+Superhuman,superhuman.com,USA,50-200,ios_android|swe|ai_engineer,greenhouse,fast email client
+Linear,linear.app,USA,50-200,ios_android|swe,ashby,issue tracking for software teams
+Notion,notion.so,USA,1000-5000,ios_android|swe|ai_engineer,greenhouse,workspace docs and databases
+Figma,figma.com,USA,1000-5000,swe|ai_engineer,greenhouse,collaborative design platform
+AllTrails,alltrails.com,USA,200-1000,ios_android|swe,greenhouse,hiking trail discovery app
+Bumble,bumble.com,USA,1000-5000,ios_android|swe,workday,dating and social app
+Hinge,hinge.co,USA,200-1000,ios_android|swe,greenhouse,relationship focused dating app
+Revolut,revolut.com,UK,5000+,ios_android|swe|ai_engineer,unknown,digital banking super app
+Monzo,monzo.com,UK,1000-5000,ios_android|swe,greenhouse,UK digital bank
+N26,n26.com,Germany,1000-5000,ios_android|swe,greenhouse,European mobile bank
+Wise,wise.com,UK,5000+,ios_android|swe,greenhouse,international money transfer
+Robinhood,robinhood.com,USA,1000-5000,ios_android|swe|ai_engineer,greenhouse,commission free stock trading
+Supabase,supabase.com,USA,50-200,swe,ashby,open source Firebase alternative
+Neon,neon.tech,USA,50-200,swe,ashby,serverless Postgres platform
+Railway,railway.com,USA,<50,swe,ashby,infrastructure deployment platform
+Render,render.com,USA,50-200,swe,greenhouse,cloud application hosting
+Fly.io,fly.io,USA,50-200,swe,custom,edge application deployment
+Turso,turso.tech,USA,<50,swe,unknown,edge SQLite database
+ClickHouse,clickhouse.com,USA,200-1000,swe,greenhouse,columnar analytics database
+Temporal,temporal.io,USA,200-1000,swe,greenhouse,durable workflow orchestration
+Inngest,inngest.com,USA,<50,swe,unknown,event driven durable functions
+Trigger.dev,trigger.dev,UK,<50,swe,unknown,background jobs for developers
+Resend,resend.com,USA,<50,swe,unknown,email API for developers
+Knock,knock.app,USA,<50,swe,unknown,notifications infrastructure API
+Vercel,vercel.com,USA,200-1000,swe|ai_engineer,greenhouse,frontend cloud and Next.js
+Netlify,netlify.com,USA,200-1000,swe,greenhouse,web development platform
+Grafana Labs,grafana.com,USA,1000-5000,swe,greenhouse,observability dashboards and metrics
+Sentry,sentry.io,USA,200-1000,swe,greenhouse,error monitoring and tracing
+PostHog,posthog.com,USA,200-1000,swe|ai_engineer,ashby,open source product analytics
+Infisical,infisical.com,USA,<50,swe,unknown,secrets management platform
+WorkOS,workos.com,USA,50-200,swe,ashby,enterprise SSO and directory sync
+Clerk,clerk.com,USA,50-200,swe,ashby,authentication for React apps
+Stytch,stytch.com,USA,50-200,swe,ashby,passwordless authentication API
+Upstash,upstash.com,USA,<50,swe,unknown,serverless Redis and Kafka
+Cockroach Labs,cockroachlabs.com,USA,200-1000,swe,greenhouse,distributed SQL database
+Timescale,timescale.com,USA,50-200,swe,greenhouse,time series Postgres database
+Dagster Labs,dagster.io,USA,50-200,swe,greenhouse,data orchestration platform
+Prefect,prefect.io,USA,50-200,swe,greenhouse,dataflow automation platform
+Airbyte,airbyte.com,USA,200-1000,swe,greenhouse,open source data integration
+Dagger,dagger.io,USA,<50,swe,unknown,programmable CI CD engine
+Perplexity,perplexity.ai,USA,200-1000,ai_engineer|swe,greenhouse,AI answer engine search
+Together AI,together.ai,USA,50-200,ai_engineer|swe,greenhouse,GPU cloud training inference platform
+Modal,modal.com,USA,<50,ai_engineer|swe,ashby,serverless GPU compute platform
+Baseten,baseten.co,USA,50-200,ai_engineer|swe,ashby,ML model inference hosting
+Fireworks AI,fireworks.ai,USA,50-200,ai_engineer|swe,greenhouse,fast LLM inference platform
+Replicate,replicate.com,USA,<50,ai_engineer|swe,ashby,run ML models via API
+Anyscale,anyscale.com,USA,50-200,ai_engineer|swe,ashby,commercializes Ray distributed compute
+LangChain,langchain.com,USA,50-200,ai_engineer|swe,ashby,agent framework and LangGraph platform
+LlamaIndex,llamaindex.ai,USA,<50,ai_engineer|swe,ashby,data framework for LLM apps
+Pinecone,pinecone.io,USA,200-1000,ai_engineer|swe,ashby,managed vector database
+Weaviate,weaviate.io,Netherlands,50-200,ai_engineer|swe,ashby,open source vector database
+Chroma,trychroma.com,USA,<50,ai_engineer|swe,custom,open source embedding database
+Qdrant,qdrant.tech,Germany,50-200,ai_engineer|swe,ashby,Rust vector search engine
+Unstructured,unstructured.io,USA,<50,ai_engineer|swe,ashby,ETL for LLM data pipelines
+Humanloop,humanloop.com,UK,<50,ai_engineer|swe,custom,LLM eval and prompt platform
+Braintrust,braintrust.dev,USA,<50,ai_engineer|swe,ashby,AI evals and observability
+Galileo,rungalileo.io,USA,50-200,ai_engineer|swe,greenhouse,LLMOps evaluation platform
+Arize AI,arize.com,USA,50-200,ai_engineer|swe,greenhouse,ML and agent observability
+Scale AI,scale.com,USA,1000-5000,ai_engineer|swe,unknown,data labeling Meta minority stake
+Surge AI,surgehq.ai,USA,50-200,ai_engineer|swe,ashby,human data labeling for LLMs
+Cohere,cohere.com,Canada,200-1000,ai_engineer|swe,ashby,enterprise foundation models
+Mistral AI,mistral.ai,France,200-1000,ai_engineer|swe,ashby,frontier open weight LLMs
+Runway,runwayml.com,USA,200-1000,ai_engineer|swe,greenhouse,generative video and world models
+ElevenLabs,elevenlabs.io,UK,200-1000,ai_engineer|swe,ashby,voice AI and speech synthesis
+Deepgram,deepgram.com,USA,200-1000,ai_engineer|swe,ashby,voice AI speech to text
+AssemblyAI,assemblyai.com,USA,50-200,ai_engineer|swe,greenhouse,speech AI models and API
+Hugging Face,huggingface.co,USA,200-1000,ai_engineer|swe,custom,open source ML model hub
+Voiceflow,voiceflow.com,Canada,50-200,ai_engineer|swe,custom,conversational AI agent builder
+Writer,writer.com,USA,200-1000,ai_engineer|swe,ashby,enterprise generative AI platform
+Glean,glean.com,USA,200-1000,ai_engineer|swe,greenhouse,enterprise AI search assistant
+Sierra,sierra.ai,USA,200-1000,ai_engineer|swe,ashby,AI customer experience agents
+Imbue,imbue.com,USA,50-200,ai_engineer|swe,greenhouse,reasoning agents and coding tools
+Contextual AI,contextual.ai,USA,50-200,ai_engineer|swe,greenhouse,enterprise RAG platform
+Vectara,vectara.com,USA,50-200,ai_engineer|swe,greenhouse,RAG as a service platform
+Zilliz,zilliz.com,USA,50-200,ai_engineer|swe,greenhouse,managed Milvus vector database
+Groq,groq.com,USA,200-1000,ai_engineer|swe,unknown,LPU low latency inference chips
+Lambda,lambda.ai,USA,200-1000,ai_engineer|swe,ashby,GPU cloud for AI training
+Cerebras Systems,cerebras.ai,USA,200-1000,ai_engineer|swe,greenhouse,wafer scale AI training chips
+Cursor,cursor.com,USA,200-1000,ai_engineer|swe,unknown,AI coding editor by Anysphere
+Mercury,mercury.com,USA,200-1000,swe,greenhouse,startup banking platform
+Ramp,ramp.com,USA,1000-5000,swe|ai_engineer,ashby,corporate card spend platform
+Brex,brex.com,USA,1000-5000,swe,greenhouse,corporate card; acquired by Capital One
+Modern Treasury,moderntreasury.com,USA,200-1000,swe,ashby,payment operations infrastructure
+Lithic,lithic.com,USA,50-200,swe,greenhouse,card issuing and processing platform
+Column,column.com,USA,50-200,swe,ashby,bank chartered for developers
+Marqeta,marqeta.com,USA,200-1000,swe,greenhouse,public card issuing platform
+Deel,deel.com,USA,5000+,swe,ashby,global payroll and HR platform
+Rippling,rippling.com,USA,1000-5000,swe,custom,HR payroll IT platform
+Gusto,gusto.com,USA,1000-5000,swe,greenhouse,payroll benefits for small business
+Pilot.com,pilot.com,USA,200-1000,swe,greenhouse,bookkeeping for startups
+Melio,meliopayments.com,USA,200-1000,swe,greenhouse,B2B payments for small business
+Alloy,alloy.com,USA,200-1000,swe|ai_engineer,greenhouse,identity risk management for banks
+Unit,unit.co,USA,50-200,swe,ashby,banking as a service platform
+Highnote,highnote.com,USA,50-200,swe,unknown,embedded card issuing platform
+Increase,increase.com,USA,<50,swe,unknown,bank grade payments API
+Fireblocks,fireblocks.com,USA,200-1000,swe,greenhouse,digital asset custody infrastructure
+Anchorage Digital,anchorage.com,USA,200-1000,swe,lever,federally chartered crypto bank
+Circle,circle.com,USA,1000-5000,swe|ai_engineer,workday,USDC stablecoin issuer
+TRM Labs,trmlabs.com,USA,200-1000,swe|ai_engineer,ashby,blockchain crime intelligence platform
+Chainalysis,chainalysis.com,USA,1000-5000,swe|ai_engineer,ashby,blockchain analytics compliance platform
+Middesk,middesk.com,USA,50-200,swe,ashby,business identity verification platform
+Sardine,sardine.ai,USA,50-200,swe|ai_engineer,ashby,fraud and compliance risk platform
+Alpaca,alpaca.markets,USA,200-1000,swe,greenhouse,brokerage infrastructure API
+Persona,withpersona.com,USA,200-1000,swe|ai_engineer,unknown,identity verification platform
+Bitso,bitso.com,Mexico,1000-5000,swe,unknown,LatAm crypto exchange platform
+dLocal,dlocal.com,Uruguay,1000-5000,swe,lever,cross border payments emerging markets
+Clara,clara.com,Mexico,200-1000,swe,unknown,corporate cards spend management LatAm
+Addi,addi.com,Colombia,200-1000,swe,ashby,buy now pay later Colombia
