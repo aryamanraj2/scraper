@@ -461,6 +461,36 @@ describe('the yield report', () => {
   })
 
   /**
+   * F5b: and truncation must not be a permanent property of a company.
+   *
+   * The count read the whole audit log, so a company cut short under F4's cap of 20
+   * stayed "truncated" after F5a raised the cap to 200 and a later run walked it to
+   * the end. Live, that left the report refusing a verdict on 44 of 99 companies when
+   * only 2 had actually been cut short — refusing to answer a question it had just
+   * finished answering, which is F5a §5's own mistake one run further on.
+   */
+  it('forgets a truncation the latest walk did not repeat', async () => {
+    const starved = await company('recovered.example', { creditsCap: 1 })
+    serveCareers('recovered.example', page('<p>No addresses here. We are hiring engineers.</p>'))
+    await curateCompanyContacts(testDb(), gate(), starved)
+    expect((await tierAYield(testDb())).companiesTruncatedByBudget).toBe(1)
+
+    // The operator raises the cap and re-runs, exactly as F5a's carry-forward #1 asks.
+    await testDb().researchBudget.updateMany({
+      where: { companyId: starved.id },
+      data: { creditsCap: 200 },
+    })
+    await curateCompanyContacts(testDb(), gate(), starved)
+
+    const y = await tierAYield(testDb())
+    expect(y.companiesTruncatedByBudget).toBe(0)
+    expect(y.companiesFullyWalked).toBe(1)
+    // The stale `budget_exhausted` row is still in the audit log, and should be: it is
+    // what happened. It just no longer describes the latest walk.
+    expect(y.preflightRefusalsByReason).toHaveProperty('budget_exhausted')
+  })
+
+  /**
    * And the repair that looks obvious is a second wrong number: the curator stops on
    * its first hit, so a company that yields on page one spends one credit and can
    * never be truncated. Yielding CAUSES being fully walked, so rating the fully-walked

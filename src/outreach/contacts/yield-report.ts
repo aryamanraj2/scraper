@@ -39,9 +39,13 @@ export type TierAYield = {
    * report claims to answer. Counting it as a zero-yield company reports "this
    * employer publishes no address" on the strength of a page we declined to fetch.
    *
-   * Measured live: 38 of 56 measured companies. The per-company cap was 20 credits and
-   * a five-page walk costs five on top of whatever research had already been charged,
-   * so most qualified companies arrived at curation already near their ceiling.
+   * Counted over the company's LATEST walk only. It used to count the whole audit
+   * log, which made truncation a permanent property: a company cut short under F4's
+   * cap of 20 stayed truncated after F5a raised the cap to 200 and a later run walked
+   * it to the end, so the report refused a verdict on a yield it had just measured.
+   *
+   * Measured live under the cap of 20: 38 of 56 measured companies. Under 200 and a
+   * five-path walk (F5b): 2 of 99.
    */
   companiesTruncatedByBudget: number
   /**
@@ -124,10 +128,24 @@ export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYi
       action: 'contact.curated',
       ...(companyIds ? { subjectId: { in: companyIds } } : {}),
     },
-    select: { subjectId: true, metadata: true },
+    select: { subjectId: true, metadata: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   })
   const attemptedIds = new Set<string>()
+  /**
+   * When each company's LATEST walk happened, and when the one before it did.
+   *
+   * `companiesTruncatedByBudget` counted `budget_exhausted` refusals over the whole
+   * audit log, so a company cut short under F4's cap of 20 stayed "truncated"
+   * forever — including after F5a raised the cap to 200 and a later run walked it to
+   * the end. The report would then refuse a verdict on a yield it had just finished
+   * measuring, which is the mistake F5a §5 exists to prevent, one run further on.
+   *
+   * The window is exclusive at the previous walk and inclusive at the latest,
+   * because the gate writes a refusal DURING the walk and the curator writes
+   * `contact.curated` after it. A company walked only once has no lower bound.
+   */
+  const walkWindow = new Map<string, { latest: Date; previous: Date | null }>()
   // A company whose pages were all refused before a request was issued has been
   // ATTEMPTED but not MEASURED, and the two must not be averaged together: a
   // zero-yield count that includes unread companies reads as evidence that employers
@@ -136,6 +154,11 @@ export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYi
   for (const a of attempts) {
     if (a.subjectId === null) continue
     attemptedIds.add(a.subjectId)
+    // `attempts` is ordered newest first, so the first row seen for a company is its
+    // latest walk and the second is the one before it.
+    const seen = walkWindow.get(a.subjectId)
+    if (seen === undefined) walkWindow.set(a.subjectId, { latest: a.createdAt, previous: null })
+    else if (seen.previous === null) seen.previous = a.createdAt
     const pagesRead = (a.metadata as { pagesRead?: unknown } | null)?.pagesRead
     if (typeof pagesRead === 'number' && pagesRead > 0) measuredIds.add(a.subjectId)
   }
@@ -200,7 +223,7 @@ export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYi
     // still reported F2's research refusals as if they were its own.
     db.auditLog.findMany({
       where: { action: 'fetch.refused', reasonCode: { not: null } },
-      select: { subjectId: true, reasonCode: true },
+      select: { subjectId: true, reasonCode: true, createdAt: true },
     }),
   ])
 
@@ -228,7 +251,12 @@ export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYi
     // A company that read a page and was then refused for want of budget was asked a
     // narrower question than the report claims to have asked it.
     if (r.reasonCode === 'budget_exhausted' && measuredIds.has(companyId)) {
-      truncatedIds.add(companyId)
+      const window = walkWindow.get(companyId)
+      const belongsToLatestWalk =
+        window !== undefined &&
+        r.createdAt <= window.latest &&
+        (window.previous === null || r.createdAt > window.previous)
+      if (belongsToLatestWalk) truncatedIds.add(companyId)
     }
   }
 
