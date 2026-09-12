@@ -4,7 +4,7 @@ import type { MatchResult } from '../taxonomy/matcher.js'
 import type { CountryResolution } from '../country/normalize.js'
 import {
   SCORE_COMPONENTS,
-  SCORE_VERSION_V1,
+  ACTIVE_SCORE_VERSION,
   bandFor,
   type ScoreBand,
   type ScoreComponentKey,
@@ -164,7 +164,7 @@ function points(value: number, max: number): number {
   return clamp(Math.round(value), 0, max)
 }
 
-export function scoreCompany(input: ScoreInput, spec: ScoreVersionSpec = SCORE_VERSION_V1): ScoreBreakdown {
+export function scoreCompany(input: ScoreInput, spec: ScoreVersionSpec = ACTIVE_SCORE_VERSION): ScoreBreakdown {
   const w = spec.weights
   const reasonCodes = new Set<ReasonCodeValue>()
   const components: ScoredComponent[] = []

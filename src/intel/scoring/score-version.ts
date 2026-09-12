@@ -116,6 +116,60 @@ export const SCORE_VERSION_V1: ScoreVersionSpec = assertSumsTo100({
   frozenUntilSends: 100,
 })
 
+/**
+ * F5b. Identical weights, identical thresholds, identical risk ceiling — and a new
+ * label, because the label is the only handle a stored score has on how it was
+ * computed.
+ *
+ * ## Why a bump when no weight moved
+ *
+ * `f2-v1` scored every company from posting TITLES. F5a added
+ * `Opportunity.description`; F5b feeds that body to the matcher as its own
+ * weighted field, which changes three inputs to the same arithmetic:
+ *
+ *   - `role_fit` reads `match.matches[0].confidence`, and the confidence now has
+ *     body evidence in it. Median top confidence over the companies holding
+ *     bodies moves 0.55 -> 0.71.
+ *   - `hiring_signal` reads `relevantOpenRoles`, which counts open postings whose
+ *     own text matches the primary track. Postings carrying a track go from 453 to
+ *     1,064 corpus-wide, so this count moves for most companies with a board.
+ *   - `internship_feasibility` and `geography` read `countTerms` over the field
+ *     text, which now includes bodies — an "internship" or "remote" stated in a
+ *     job description was previously invisible.
+ *
+ * `scoreCompany` is still pure and still deterministic. But the same company, with
+ * no new row fetched, now scores differently — and `AuditLog` records the version
+ * label against every `score.computed`. Leaving the label at `f2-v1` would put two
+ * different totals for the same company under the same version in the audit trail,
+ * which reads as a scorer that is not deterministic, and would make A11's "review
+ * the reason codes instead of tuning the weights" impossible to do honestly: an
+ * operator comparing this week's reasons against last week's would be comparing
+ * two different functions labelled as one.
+ *
+ * A1's replay is unaffected either way — `reconstructTotal` works off the stored
+ * components — which is precisely why the bump is cheap. It costs one row.
+ *
+ * The weights are NOT being re-tuned. A11's freeze holds; `frozenUntilSends` is
+ * carried over unchanged, and it is the input derivation that moved, not the
+ * response to it.
+ */
+export const SCORE_VERSION_V2: ScoreVersionSpec = assertSumsTo100({
+  label: 'f5b-v2',
+  weights: { ...SCORE_VERSION_V1.weights },
+  thresholds: { ...SCORE_VERSION_V1.thresholds },
+  maxRiskDeduction: SCORE_VERSION_V1.maxRiskDeduction,
+  frozenUntilSends: SCORE_VERSION_V1.frozenUntilSends,
+})
+
+/**
+ * The version new scores are computed under.
+ *
+ * Every call site that means "the current weight set" reads this. `SCORE_VERSION_V1`
+ * stays exported and stays frozen: it is what historical `f2-v1` leads and audit
+ * rows are replayed against, and editing it would rewrite their meaning.
+ */
+export const ACTIVE_SCORE_VERSION: ScoreVersionSpec = SCORE_VERSION_V2
+
 export type ScoreBand = 'queue' | 'research' | 'reject'
 
 export function bandFor(total: number, thresholds: ScoreThresholds): ScoreBand {

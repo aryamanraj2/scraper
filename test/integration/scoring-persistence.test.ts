@@ -5,6 +5,7 @@ import { ensureScoreVersion, scoreCompanyAndPersist } from '../../src/intel/scor
 import { reconstructTotal } from '../../src/intel/scoring/score.js'
 import { SCORE_VERSION_V1 } from '../../src/intel/scoring/score-version.js'
 import { computeJobCountDelta, latestJobCountDelta } from '../../src/intel/signals/job-count-delta.js'
+import { seedRoleTracks } from '../../src/intel/taxonomy/seed-tracks.js'
 
 const NOW = new Date('2026-09-09T12:00:00Z')
 
@@ -267,5 +268,72 @@ describe('ATS job-count delta (B2)', () => {
     if (!a.scored || !b.scored) throw new Error('expected both to score')
     const hiring = (o: typeof a) => o.breakdown.components.find((c) => c.key === 'hiring_signal')!.points
     expect(hiring(a)).toBeGreaterThan(hiring(b))
+  })
+})
+
+/**
+ * F5b: `Opportunity.description` reaches the matcher as its own weighted field.
+ *
+ * The rule under test is `matchOnePosting`'s: the TITLE nominates which track a
+ * posting carries, the body corroborates. F3 picks a resume off
+ * `Opportunity.roleTrackId`, so a body that could take the primary slot would be
+ * `ORCHESTRATOR-HANDOVER.md` §2's "16 packets handing an iOS resume to generalist
+ * roles", with the arrow pointing the other way.
+ */
+describe('posting bodies (F5b)', () => {
+  // `truncateAll` clears RoleTrack, and `roleTrackIdsByKey` is what turns a matched
+  // track into the FK F3 reads. Without the rows the assignment is silently null.
+  beforeEach(async () => { await seedRoleTracks(testDb()) })
+
+  // Shaped like a real one: a company overview about the employer's stack, then a
+  // short section about the role itself.
+  const BACKEND_BOILERPLATE = `
+    COMPANY OVERVIEW. We run distributed systems on Kubernetes and Docker across
+    AWS and GCP. Postgres, Kafka, Redis, gRPC and a REST API in Java, built as
+    microservices with an eye on scalability.
+  `
+
+  async function trackKeyOf(title: string, description: string | null): Promise<string | null> {
+    const company = await makeCompany({ ycOneLiner: null, ycLongDescription: null })
+    await testDb().opportunity.create({
+      data: {
+        companyId: company.id, kind: 'published_role', status: 'open', title, description,
+        roleUrl: 'https://boards.example/jobs/9', externalId: `job-${Math.random()}`, lastSeenAt: NOW,
+      },
+    })
+    await scoreCompanyAndPersist(testDb(), company, { now: NOW })
+    const row = await testDb().opportunity.findFirstOrThrow({
+      where: { companyId: company.id },
+      select: { roleTrack: { select: { key: true } } },
+    })
+    return row.roleTrack?.key ?? null
+  }
+
+  it('keeps the track the title names when the body is about the employer', async () => {
+    expect(await trackKeyOf('Senior iOS Engineer', null)).toBe('ios_android')
+    expect(
+      await trackKeyOf('Senior iOS Engineer', `${BACKEND_BOILERPLATE}\nYou will own our iOS app in Swift.`),
+    ).toBe('ios_android')
+  })
+
+  it('labels a posting whose title says nothing, from its body alone', async () => {
+    expect(await trackKeyOf('Software Engineer II', null)).toBeNull()
+    expect(await trackKeyOf('Software Engineer II', BACKEND_BOILERPLATE)).toBe('sde')
+  })
+
+  it('counts a body-matched posting towards the primary track\'s open roles', async () => {
+    const company = await makeCompany()
+    await testDb().opportunity.create({
+      data: {
+        companyId: company.id, kind: 'published_role', status: 'open', title: 'Engineer, Growth',
+        description: 'You will ship our Android app in Kotlin with Jetpack Compose.',
+        roleUrl: 'https://boards.example/jobs/11', externalId: 'job-body-1', lastSeenAt: NOW,
+      },
+    })
+    const outcome = await scoreCompanyAndPersist(testDb(), company, { now: NOW })
+    if (!outcome.scored) throw new Error('expected a score')
+    expect(outcome.breakdown.primaryTrack).toBe('ios_android')
+    const hiring = outcome.breakdown.components.find((c) => c.key === 'hiring_signal')!
+    expect(hiring.reason).toMatch(/1 open role\(s\) matching the primary track/)
   })
 })

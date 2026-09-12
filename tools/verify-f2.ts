@@ -19,7 +19,7 @@ import { prisma, disconnectPrisma } from '../src/core/db/client.js'
 import { MILESTONE_STAGE, isAtOrAfter } from '../src/core/config/stage.js'
 import { reachableReasonCodes } from '../src/core/reason-codes/registry.js'
 import { reconstructTotal } from '../src/intel/scoring/score.js'
-import { SCORE_VERSION_V1, sumWeights, type ScoreVersionSpec } from '../src/intel/scoring/score-version.js'
+import { ACTIVE_SCORE_VERSION, sumWeights, type ScoreVersionSpec } from '../src/intel/scoring/score-version.js'
 
 type Check = { name: string; ok: boolean; detail: string }
 const checks: Check[] = []
@@ -99,10 +99,10 @@ const db = prisma()
   })
   checks.push({
     name: 'Score sums to exactly 100, per ScoreVersion',
-    ok: rows.length > 0 && bad.length === 0 && sumWeights(SCORE_VERSION_V1.weights) === 100,
+    ok: rows.length > 0 && bad.length === 0 && sumWeights(ACTIVE_SCORE_VERSION.weights) === 100,
     detail:
       `${rows.length} stored version(s): ${rows.map((r) => r.label).join(', ')}; ` +
-      `${bad.length} not summing to 100; active spec ${SCORE_VERSION_V1.label} sums to ${sumWeights(SCORE_VERSION_V1.weights)}`,
+      `${bad.length} not summing to 100; active spec ${ACTIVE_SCORE_VERSION.label} sums to ${sumWeights(ACTIVE_SCORE_VERSION.weights)}`,
   })
 }
 

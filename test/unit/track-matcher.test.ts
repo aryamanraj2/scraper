@@ -145,3 +145,82 @@ describe('word boundaries', () => {
     expect(swe.specificTerms).toEqual(expect.arrayContaining(['next.js', 'ci/cd']))
   })
 })
+
+/**
+ * F5b: `Opportunity.description` reaches the matcher as its own field, weighted
+ * below the title. These pin the two properties the weight exists to give — that a
+ * long body cannot outvote a short title, and that the title-only path is exactly
+ * the function it was before the weight existed.
+ */
+describe('per-field weighting (F5b: the posting body)', () => {
+  const IOS_TITLE = 'Senior iOS Engineer — Bengaluru'
+  // The shape a real 6,000-character body has: a company overview that describes
+  // the employer's stack, not this role.
+  const BACKEND_BODY = `
+    COMPANY OVERVIEW. We run a distributed systems platform on Kubernetes and
+    Docker across AWS and GCP, with Postgres, Kafka and Redis behind a gRPC and
+    REST API layer. Our backend is written in Java with microservices.
+    ABOUT THE ROLE. You will own our iOS app, written in Swift and SwiftUI, and
+    ship it through Xcode to the App Store.
+  `
+
+  it('leaves an unweighted field set byte-for-byte as it was', () => {
+    const withoutWeight = matchTracks([{ field: 'posting:x', text: IOS_TITLE }])
+    const withExplicitOne = matchTracks([{ field: 'posting:x', text: IOS_TITLE, weight: 1 }])
+    expect(withExplicitOne).toEqual(withoutWeight)
+  })
+
+  /**
+   * The weight damps a long field; it does not by itself decide which track a
+   * POSTING carries. That guarantee is `matchOnePosting` in `collect.ts`, which
+   * only lets a title-supported track take the primary slot — and it is tested
+   * there, because it is a fact about postings rather than about text.
+   */
+  it('damps a long body rather than letting it speak at title volume', () => {
+    const sdeOf = (weight?: number) =>
+      matchTracks([
+        { field: 'posting:x', text: IOS_TITLE },
+        ...(weight === undefined
+          ? [{ field: 'posting-body:x', text: BACKEND_BODY }]
+          : [{ field: 'posting-body:x', text: BACKEND_BODY, weight }]),
+      ]).considered.find((m) => m.track === 'sde')!
+
+    expect(sdeOf(0.3).confidence).toBeLessThan(sdeOf().confidence)
+    // Thirteen backend phrases in one body are still evidence, just not thirteen
+    // phrases' worth: at parity the body alone saturates the track.
+    expect(sdeOf().confidence).toBeGreaterThan(0.9)
+    expect(sdeOf(0.3).confidence).toBeLessThan(0.85)
+  })
+
+  it('still lets a body supply a label the title cannot', () => {
+    const titleOnly = matchTracks([{ field: 'posting:x', text: 'Software Engineer II' }])
+    expect(titleOnly.matches).toHaveLength(0)
+
+    const withBody = matchTracks([
+      { field: 'posting:x', text: 'Software Engineer II' },
+      { field: 'posting-body:x', text: BACKEND_BODY, weight: 0.3 },
+    ])
+    expect(withBody.matches.map((m) => m.track)).toContain('sde')
+  })
+
+  it('counts a phrase once, at its best field, however often it is restated', () => {
+    const once = matchTracks([{ field: 'posting:x', text: 'iOS' }])
+    const restated = matchTracks([
+      { field: 'posting:x', text: 'iOS' },
+      { field: 'posting-body:x', text: 'iOS. iOS. iOS. iOS. iOS.', weight: 0.3 },
+    ])
+    const ios = (r: typeof once) => r.considered.find((m) => m.track === 'ios_android')!
+    expect(ios(restated).confidence).toBe(ios(once).confidence)
+  })
+
+  it('weights counter-evidence the same way it weights evidence', () => {
+    const inTitle = matchTracks([{ field: 'posting:x', text: 'Backend Engineer, Account Manager Tools' }])
+    const inBody = matchTracks([
+      { field: 'posting:x', text: 'Backend Engineer' },
+      { field: 'posting-body:x', text: 'You will partner with an account manager.', weight: 0.3 },
+    ])
+    const sde = (r: typeof inTitle) => r.considered.find((m) => m.track === 'sde')!
+    expect(sde(inBody).confidence).toBeGreaterThan(sde(inTitle).confidence)
+    expect(sde(inBody).negativeTerms).toEqual(['account manager'])
+  })
+})

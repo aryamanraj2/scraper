@@ -5,6 +5,7 @@
  *   npm run intel:run                    # score every company, no network
  *   npm run intel:run -- --research 20   # also research up to 20 companies (LIVE)
  *   npm run intel:run -- --research 60 --country India   # scoped to one geography
+ *   npm run intel:run -- --research 170 --seeded        # scoped to data/company-seed.csv
  *   npm run intel:run -- --briefs        # queue research briefs for qualified leads
  *
  * Without `--research` this touches no network at all: it scores from rows F1
@@ -28,7 +29,7 @@ import { SignalGraphService } from '../src/intel/signal-graph.js'
 import { researchCompanyPage } from '../src/intel/research/page-research.js'
 import { FirecrawlResearchProvider } from '../src/intel/research/firecrawl.js'
 import { queueResearchBrief } from '../src/intel/brief/queue-brief.js'
-import { SCORE_VERSION_V1 } from '../src/intel/scoring/score-version.js'
+import { ACTIVE_SCORE_VERSION } from '../src/intel/scoring/score-version.js'
 
 function flag(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`)
@@ -52,6 +53,22 @@ const refreshPages = process.argv.includes('--refresh-pages')
  * have no detected board, so page research is the only source they have.
  */
 const country = flag('country')
+/**
+ * Restrict research to the companies that came from `data/company-seed.csv`.
+ *
+ * Without it, research walks the corpus oldest-first, and the corpus is 1,975
+ * yc-oss companies ingested before the seed file existed — so `--research 170`
+ * spends all 170 fetches on yc companies and never reaches an operator-seeded one.
+ * F5a's carry-forward #5 asks for the opposite: the seeded companies are the ones
+ * that were normalized with no research, and whether any of them reaches an
+ * `ios_android` lead is the question the seed file was built to answer.
+ *
+ * The discriminator is the Evidence row, not the tag: `ingest:seed --from-file`
+ * writes `fetchedVia: 'user_hint'` for every field it takes from the file, and it
+ * is the only writer that does. A `seed-*` tag would identify the same 188 rows
+ * today, but a tag is a value a later source could also write.
+ */
+const seededOnly = process.argv.includes('--seeded')
 
 const db = prisma()
 const config = env()
@@ -59,7 +76,7 @@ const config = env()
 const tracks = await seedRoleTracks(db)
 console.log(`Role tracks: ${tracks.created} created, ${tracks.updated} updated.`)
 await ensureScoreVersion(db)
-console.log(`Score version: ${SCORE_VERSION_V1.label} (weights sum to 100, thresholds ${JSON.stringify(SCORE_VERSION_V1.thresholds)}).`)
+console.log(`Score version: ${ACTIVE_SCORE_VERSION.label} (weights sum to 100, thresholds ${JSON.stringify(ACTIVE_SCORE_VERSION.thresholds)}).`)
 
 // --- B2: job-count deltas from signals F1 already stored, no refetch ---------
 {
@@ -92,15 +109,16 @@ if (researchLimit > 0) {
   // `detect_ats` actions are skipped here — detection belongs to `ingest:seed`,
   // which owns the two-stage path and its own rate budget.
   const countryFilter = country ? { countries: { has: country } } : {}
+  const seedFilter = seededOnly ? { evidence: { some: { fetchedVia: 'user_hint' as const } } } : {}
   const companies = [
     ...(await db.company.findMany({
-      where: { status: 'insufficient_evidence', ...countryFilter },
+      where: { status: 'insufficient_evidence', ...countryFilter, ...seedFilter },
       select: { id: true, canonicalDomain: true, careersUrl: true, atsSlug: true, atsBoardToken: true, countries: true },
       orderBy: { createdAt: 'asc' },
       take: researchLimit,
     })),
     ...(await db.company.findMany({
-      where: { status: { not: 'insufficient_evidence' }, ...countryFilter },
+      where: { status: { not: 'insufficient_evidence' }, ...countryFilter, ...seedFilter },
       select: { id: true, canonicalDomain: true, careersUrl: true, atsSlug: true, atsBoardToken: true, countries: true },
       orderBy: { createdAt: 'asc' },
       take: researchLimit,
@@ -108,7 +126,8 @@ if (researchLimit > 0) {
   ].slice(0, researchLimit)
 
   console.log(
-    `\nResearching ${companies.length} companies${country ? ` in ${country}` : ''} (LIVE, through FetchPolicyGate)...`,
+    `\nResearching ${companies.length} companies${country ? ` in ${country}` : ''}` +
+      `${seededOnly ? ' seeded from data/company-seed.csv' : ''} (LIVE, through FetchPolicyGate)...`,
   )
   const outcomes = new Map<string, number>()
   for (const company of companies) {
@@ -159,9 +178,9 @@ if (researchLimit > 0) {
   console.log(
     `\nScored ${scores.length} of ${companies.length} companies ` +
       `(${refused} refused as insufficient_evidence).\n` +
-      `  queue (>=${SCORE_VERSION_V1.thresholds.queue}): ${bands.queue}\n` +
-      `  research (${SCORE_VERSION_V1.thresholds.research}-${SCORE_VERSION_V1.thresholds.queue - 1}): ${bands.research}\n` +
-      `  reject (<${SCORE_VERSION_V1.thresholds.research}): ${bands.reject}\n` +
+      `  queue (>=${ACTIVE_SCORE_VERSION.thresholds.queue}): ${bands.queue}\n` +
+      `  research (${ACTIVE_SCORE_VERSION.thresholds.research}-${ACTIVE_SCORE_VERSION.thresholds.queue - 1}): ${bands.research}\n` +
+      `  reject (<${ACTIVE_SCORE_VERSION.thresholds.research}): ${bands.reject}\n` +
       `  min ${scores[0] ?? 0}, median ${median}, max ${scores[scores.length - 1] ?? 0}`,
   )
 }

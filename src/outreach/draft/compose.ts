@@ -3,7 +3,7 @@ import type { Db } from '../../core/audit/audit-log.js'
 import { writeAudit } from '../../core/audit/audit-log.js'
 import { decideOutreachCase, type OutreachFacts } from '../../core/policy/outreach-case.js'
 import type { ReasonCodeValue } from '../../core/reason-codes/registry.js'
-import { SCORE_VERSION_V1 } from '../../intel/scoring/score-version.js'
+import { ACTIVE_SCORE_VERSION } from '../../intel/scoring/score-version.js'
 import { loadTrackResumes } from '../../apply/packet/generate.js'
 import { checkJurisdiction } from './jurisdiction.js'
 import {
@@ -330,7 +330,7 @@ export function factsFor(
     applicationSubmitted: lead.statusReason === 'application_submitted',
     hasPublicRecruitingContact: routeExists,
     speculativeEvidenceStrong:
-      lead.leadKind === 'speculative' && (lead.score ?? 0) >= SCORE_VERSION_V1.thresholds.queue,
+      lead.leadKind === 'speculative' && (lead.score ?? 0) >= ACTIVE_SCORE_VERSION.thresholds.queue,
     hasVerifiedContact: contact?.verified === true,
     leadQualified: lead.status === 'qualified' || lead.status === 'accepted',
   }

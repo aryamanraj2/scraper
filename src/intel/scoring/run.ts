@@ -4,7 +4,7 @@ import { writeAudit } from '../../core/audit/audit-log.js'
 import type { ReasonCodeValue } from '../../core/reason-codes/registry.js'
 import { collectScoreInput, type CompanyForScoring } from './collect.js'
 import { scoreCompany, type ScoreBreakdown } from './score.js'
-import { SCORE_VERSION_V1, assertSumsTo100, type ScoreVersionSpec } from './score-version.js'
+import { ACTIVE_SCORE_VERSION, assertSumsTo100, type ScoreVersionSpec } from './score-version.js'
 import { roleTrackIdsByKey } from '../taxonomy/seed-tracks.js'
 
 /**
@@ -44,7 +44,7 @@ export function currentCampaignCycle(now = new Date()): string {
  * it — the exact failure `ScoreVersion` exists to prevent. Changing weights means
  * a new label.
  */
-export async function ensureScoreVersion(db: Db, spec: ScoreVersionSpec = SCORE_VERSION_V1): Promise<string> {
+export async function ensureScoreVersion(db: Db, spec: ScoreVersionSpec = ACTIVE_SCORE_VERSION): Promise<string> {
   assertSumsTo100(spec)
   const existing = await db.scoreVersion.findUnique({ where: { label: spec.label }, select: { id: true } })
   if (existing) return existing.id
@@ -91,7 +91,7 @@ export async function scoreCompanyAndPersist(
   opts: ScoreCompanyOptions = {},
 ): Promise<ScoreCompanyOutcome> {
   const now = opts.now ?? new Date()
-  const spec = opts.spec ?? SCORE_VERSION_V1
+  const spec = opts.spec ?? ACTIVE_SCORE_VERSION
   const campaignCycle = opts.campaignCycle ?? currentCampaignCycle(now)
 
   const collected = await collectScoreInput(db, company, now)
