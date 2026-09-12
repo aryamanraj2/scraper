@@ -27,10 +27,38 @@ export type TierAYield = {
    * is "we never looked".
    */
   companiesMeasured: number
+  /**
+   * Of the measured companies, those whose path walk was cut short by OUR OWN
+   * per-company research cap rather than by the employer running out of pages.
+   *
+   * This is the distinction `companiesMeasured` does not make, and it is the one that
+   * decides whether the yield number means anything. The curator tries up to five
+   * paths and stops early on `budget_exhausted`, which is correct — there is no
+   * headroom and every further page costs more — but a company that was refused at
+   * `/contact` because the cap ran out has not been asked the question the yield
+   * report claims to answer. Counting it as a zero-yield company reports "this
+   * employer publishes no address" on the strength of a page we declined to fetch.
+   *
+   * Measured live: 38 of 56 measured companies. The per-company cap was 20 credits and
+   * a five-page walk costs five on top of whatever research had already been charged,
+   * so most qualified companies arrived at curation already near their ceiling.
+   */
+  companiesTruncatedByBudget: number
+  /**
+   * Measured, and walked to the end of the path list.
+   *
+   * Not a clean denominator either, and the report says so: the curator stops on its
+   * first hit, so a company that yielded early spent one credit and could not have
+   * been truncated. Being fully walked is partly CAUSED by yielding, which biases this
+   * subset upward. It is the ceiling to `companiesMeasured`'s floor.
+   */
+  companiesFullyWalked: number
   companiesWithContact: number
   companiesWithZero: number
   /** Of the companies with a contact, those with a ROLE ALIAS rather than a person. */
   companiesWithAlias: number
+  /** The same, restricted to fully-walked companies — the numerator that matches the denominator. */
+  companiesWithAliasFullyWalked: number
   totalContacts: number
   contactsPerCompany: { mean: number; median: number; max: number }
   byPageKind: Record<string, number>
@@ -50,20 +78,29 @@ export type TierAYield = {
 const ALIAS_TYPES = new Set(['careers_alias', 'talent_alias', 'university_recruiting'])
 
 /**
- * Whether a refused URL sits on one of the attempted companies' domains.
+ * Which attempted company a refused URL belongs to, or null.
  *
  * Subdomains count — the curator follows redirects through the gate, so an
  * apex-to-`www` hop is refused under `www.` while the company row holds the apex.
+ *
+ * It returns the company rather than a boolean because a refusal has to be
+ * attributable: "98 budget refusals happened somewhere" and "38 companies were cut
+ * short mid-walk" are the same rows and only the second is a finding.
  */
-function hostBelongsTo(url: string, domains: ReadonlySet<string>): boolean {
+function companyForRefusedUrl(
+  url: string,
+  domainToCompany: ReadonlyMap<string, string>,
+): string | null {
   let host: string
   try {
     host = new URL(url).host.toLowerCase().replace(/^www\./, '')
   } catch {
-    return false
+    return null
   }
-  for (const d of domains) if (host === d || host.endsWith(`.${d}`)) return true
-  return false
+  for (const [domain, companyId] of domainToCompany) {
+    if (host === domain || host.endsWith(`.${domain}`)) return companyId
+  }
+  return null
 }
 
 export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYield> {
@@ -173,27 +210,39 @@ export async function tierAYield(db: Db, companyIds?: string[]): Promise<TierAYi
   // Only refusals on a host belonging to a company the curator attempted. Everything
   // else in this table is F2's page research, and attributing it here would report a
   // clean curation run as one full of refusals.
-  const attemptedHosts = new Set(
+  const domainToCompany = new Map(
     (
       await db.company.findMany({
         where: { id: { in: [...attemptedIds] } },
-        select: { canonicalDomain: true },
+        select: { id: true, canonicalDomain: true },
       })
-    ).map((c) => c.canonicalDomain),
+    ).map((c) => [c.canonicalDomain, c.id] as const),
   )
   const preflightRefusalsByReason: Record<string, number> = {}
+  const truncatedIds = new Set<string>()
   for (const r of preflightRefusals) {
     if (!r.reasonCode || !r.subjectId) continue
-    if (!hostBelongsTo(r.subjectId, attemptedHosts)) continue
+    const companyId = companyForRefusedUrl(r.subjectId, domainToCompany)
+    if (companyId === null) continue
     preflightRefusalsByReason[r.reasonCode] = (preflightRefusalsByReason[r.reasonCode] ?? 0) + 1
+    // A company that read a page and was then refused for want of budget was asked a
+    // narrower question than the report claims to have asked it.
+    if (r.reasonCode === 'budget_exhausted' && measuredIds.has(companyId)) {
+      truncatedIds.add(companyId)
+    }
   }
+
+  const fullyWalkedIds = [...measuredIds].filter((id) => !truncatedIds.has(id))
 
   return {
     companiesAttempted: attemptedIds.size,
     companiesMeasured: measuredIds.size,
+    companiesTruncatedByBudget: truncatedIds.size,
+    companiesFullyWalked: fullyWalkedIds.length,
     companiesWithContact: perCompany.size,
     companiesWithZero: zeroIds.length,
     companiesWithAlias: aliasCompanies.size,
+    companiesWithAliasFullyWalked: fullyWalkedIds.filter((id) => aliasCompanies.has(id)).length,
     totalContacts: contacts.length,
     contactsPerCompany: {
       mean: Number(mean.toFixed(2)),
@@ -235,14 +284,50 @@ export function providerVerdict(y: TierAYield): string {
   if (measured === 0) {
     return `0 of ${y.companiesAttempted} companies had a page read — every one was refused before a request was issued. This is NOT a yield of zero; nothing has been measured. Refusals: ${JSON.stringify(y.preflightRefusalsByReason)}`
   }
-  if (measured < y.companiesAttempted) {
+
+  const prefix =
+    measured < y.companiesAttempted
+      ? `Only ${measured} of ${y.companiesAttempted} companies had a page read; the rest were refused before a request was issued ` +
+        `(${JSON.stringify(y.preflightRefusalsByReason)}). `
+      : ''
+
+  // The correction that matters most to the buy decision, and the one the raw
+  // "N of M had a page read" line hides. A company cut off at `/careers` because its
+  // 20-credit envelope ran out was asked about one page, not five, and calling it
+  // zero-yield states a fact about the employer on the strength of a page we chose not
+  // to fetch.
+  //
+  // **And the obvious repair — rate the subset that was walked to the end — is a
+  // second wrong number, not a right one.** The curator stops the moment it finds a
+  // recruiting route, so a company that yields on `/careers` spends one credit and can
+  // never be truncated, while a company that yields nothing keeps walking until the
+  // cap stops it. Yielding is therefore a CAUSE of being fully walked, and the
+  // fully-walked rate is biased upward by construction.
+  //
+  // So there are two numbers and neither is the answer: the all-measured rate is a
+  // floor, the fully-walked rate is a ceiling, and the honest output is to say so and
+  // refuse the verdict. That is the same position this function already takes when
+  // nothing was read at all — a confident rate derived from pages nobody fetched is
+  // worse than no rate.
+  if (y.companiesTruncatedByBudget > 0) {
+    const floor = ((y.companiesWithAlias / measured) * 100).toFixed(0)
+    const walked = y.companiesFullyWalked
+    const ceiling =
+      walked === 0 ? null : ((y.companiesWithAliasFullyWalked / walked) * 100).toFixed(0)
     return (
-      `Only ${measured} of ${y.companiesAttempted} companies had a page read; the rest were refused before a request was issued ` +
-      `(${JSON.stringify(y.preflightRefusalsByReason)}). Rate the yield on the ${measured} measured, not on the attempted. ` +
-      verdictFromRate(y.companiesWithAlias / measured)
+      `${prefix}NO VERDICT — the yield has not been measured. ${y.companiesTruncatedByBudget} of the ${measured} ` +
+      `measured companies were cut short mid-walk by OUR per-company research cap, not by the employer. ` +
+      `Rating all ${measured} gives ${floor}%, which is a FLOOR: the truncated companies were never fully asked. ` +
+      (ceiling === null
+        ? `No company was walked to the end of the path list, so there is no upper bound either. `
+        : `Rating the ${walked} walked to the end gives ${ceiling}%, which is a CEILING: the curator stops on its ` +
+          `first hit, so a company that yielded early could not have been truncated, and the fully-walked subset is ` +
+          `biased towards yielders by construction. `) +
+      `Raise the per-company credits cap and re-run the curator before quoting a rate to a vendor decision.`
     )
   }
-  return verdictFromRate(y.companiesWithAlias / measured)
+
+  return prefix + verdictFromRate(y.companiesWithAlias / measured)
 }
 
 function verdictFromRate(aliasRate: number): string {

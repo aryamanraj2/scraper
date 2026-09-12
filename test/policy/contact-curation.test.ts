@@ -32,7 +32,7 @@ function gate() {
   })
 }
 
-async function company(domain: string, opts: { robots?: string | null } = {}) {
+async function company(domain: string, opts: { robots?: string | null; creditsCap?: number } = {}) {
   const row = await testDb().company.create({
     data: {
       canonicalDomain: domain,
@@ -50,7 +50,7 @@ async function company(domain: string, opts: { robots?: string | null } = {}) {
     data: {
       companyId: row.id,
       periodMonth: `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
-      creditsCap: 20,
+      creditsCap: opts.creditsCap ?? 20,
       billedUsdCap: 0,
     },
   })
@@ -438,5 +438,65 @@ describe('the yield report', () => {
     const verdict = providerVerdict(y)
     expect(verdict).toContain('NOT a yield of zero')
     expect(verdict).not.toContain('data broker')
+  })
+
+  /**
+   * The same class of error one level in, and the one that was actually being quoted
+   * into the buy/don't-buy decision: "56 of 58 had a page read" is true, and 38 of
+   * those 56 had their walk stopped by OUR per-company cap rather than by the employer
+   * running out of pages. A company asked about `/careers` and then refused at
+   * `/contact` for want of credits is under-measured, not zero-yield.
+   */
+  it('separates a walk cut short by our own budget from an employer with nothing to publish', async () => {
+    // One credit buys exactly one page, so the walk stops at the second path.
+    const starved = await company('starved.example', { creditsCap: 1 })
+    serveCareers('starved.example', page('<p>No addresses here. We are hiring engineers.</p>'))
+    await curateCompanyContacts(testDb(), gate(), starved)
+
+    const y = await tierAYield(testDb())
+    expect(y.companiesMeasured).toBe(1)
+    expect(y.companiesTruncatedByBudget).toBe(1)
+    expect(y.companiesFullyWalked).toBe(0)
+    expect(y.preflightRefusalsByReason).toHaveProperty('budget_exhausted')
+  })
+
+  /**
+   * And the repair that looks obvious is a second wrong number: the curator stops on
+   * its first hit, so a company that yields on page one spends one credit and can
+   * never be truncated. Yielding CAUSES being fully walked, so rating the fully-walked
+   * subset is biased upward — which is why the verdict refuses both rates and names
+   * them as a floor and a ceiling.
+   */
+  it('refuses a verdict when the cap truncated the walk, and names both bounds', async () => {
+    const starved = await company('starved.example', { creditsCap: 1 })
+    serveCareers('starved.example', page('<p>No addresses here. We are hiring engineers.</p>'))
+    await curateCompanyContacts(testDb(), gate(), starved)
+
+    const found = await company('found.example')
+    serveCareers('found.example', page('<p>Write to careers@found.example.</p>'))
+    await curateCompanyContacts(testDb(), gate(), found)
+
+    const y = await tierAYield(testDb())
+    expect(y.companiesFullyWalked).toBe(1)
+    expect(y.companiesWithAliasFullyWalked).toBe(1)
+
+    const verdict = providerVerdict(y)
+    expect(verdict).toContain('NO VERDICT')
+    expect(verdict).toContain('FLOOR')
+    expect(verdict).toContain('CEILING')
+    // 1 of 2 measured is the floor; 1 of 1 fully walked is the ceiling. Neither is
+    // offered as the answer.
+    expect(verdict).toContain('50%')
+    expect(verdict).toContain('100%')
+  })
+
+  it('gives a plain verdict when nothing was truncated', async () => {
+    const found = await company('found.example')
+    serveCareers('found.example', page('<p>Write to careers@found.example.</p>'))
+    await curateCompanyContacts(testDb(), gate(), found)
+
+    const verdict = providerVerdict(await tierAYield(testDb()))
+    expect(verdict).not.toContain('NO VERDICT')
+    expect(verdict).toContain('published a role alias')
   })
 })

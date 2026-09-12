@@ -89,9 +89,11 @@ if (!has('--report')) {
 const y = await tierAYield(db)
 console.log('\n── Tier A yield ──\n')
 console.log(`  companies attempted      ${y.companiesAttempted}`)
-console.log(`  pages actually read for  ${y.companiesMeasured}   <- the yield denominator`)
+console.log(`  pages actually read for  ${y.companiesMeasured}`)
+console.log(`  cut short by the cap     ${y.companiesTruncatedByBudget}   <- under-measured, NOT zero-yield`)
+console.log(`  walked to the end        ${y.companiesFullyWalked}   <- biased towards yielders; see the verdict`)
 console.log(`  with at least 1 contact  ${y.companiesWithContact}`)
-console.log(`  with a ROLE ALIAS        ${y.companiesWithAlias}`)
+console.log(`  with a ROLE ALIAS        ${y.companiesWithAlias} (${y.companiesWithAliasFullyWalked} of the fully walked)`)
 console.log(`  yielded zero             ${y.companiesWithZero}`)
 console.log(`  total contacts           ${y.totalContacts}`)
 console.log(
