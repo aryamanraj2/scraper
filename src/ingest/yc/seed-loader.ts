@@ -33,9 +33,27 @@ export type SeedRunResult = {
   sourceFailure?: { reason: ReasonCodeValue; detail: string } | undefined
 }
 
+/**
+ * What a loader does with one canonicalized record. Everything before this point —
+ * canonicalization, the within-run duplicate check, the skip accounting, the audit
+ * trail — is identical for every seed source; what differs is which columns a source
+ * is entitled to write and which `Evidence` shape its facts get.
+ *
+ * Injected rather than branched on inside `upsertSeededCompany`, so the yc path is
+ * exactly the code it was before this seam existed.
+ */
+export type SeedUpsert = (
+  db: Db,
+  seed: CompanySeed,
+  canonicalDomain: string,
+  observedAt: Date,
+) => Promise<{ status: 'created' | 'updated'; evidenceSkipped: boolean }>
+
 export type SeedLoaderOptions = {
   since?: Date | undefined
   now?: () => Date
+  /** Defaults to the yc-oss upsert. See `src/ingest/file/operator-seed.ts` for the other. */
+  upsert?: SeedUpsert
 }
 
 /**
@@ -66,6 +84,7 @@ export async function runSeedIngest(
   opts: SeedLoaderOptions = {},
 ): Promise<SeedRunResult> {
   const now = opts.now ?? (() => new Date())
+  const upsert = opts.upsert ?? upsertSeededCompany
   const result: SeedRunResult = { seen: 0, created: 0, updated: 0, unchanged: 0, skipped: [] }
 
   // Canonical domains claimed during THIS run. The unique index already prevents
@@ -118,7 +137,7 @@ export async function runSeedIngest(
       }
       claimed.set(canonical.domain, seed.externalId)
 
-      const outcome = await upsertSeededCompany(db, seed, canonical.domain, now())
+      const outcome = await upsert(db, seed, canonical.domain, now())
       result[outcome.status] += 1
       if (outcome.evidenceSkipped) result.unchanged += 1
     }

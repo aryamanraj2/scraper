@@ -56,6 +56,16 @@ export type CompanySeed = {
   isHiring?: boolean | undefined
   /** The source's own lifecycle string, retained verbatim (handover.md §6). */
   lifecycleStatus?: string | undefined
+  /**
+   * Which kind of source produced this record. Defaults to `yc`.
+   *
+   * It is a discriminator rather than a free label: it decides the `Evidence`
+   * `sourceType` and confidence the record is written with, whether `Company.ycId` is
+   * claimed, and — through `SeedLoaderOptions.upsert` — which of the two upserts runs.
+   * There are exactly two seed sources and each has a different idea of what it is
+   * entitled to overwrite, so naming them beats a strategy object nobody can grep for.
+   */
+  origin?: 'yc' | 'operator_file' | undefined
   source: SeedSourceRecord
 }
 
