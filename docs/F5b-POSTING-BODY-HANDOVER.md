@@ -232,7 +232,78 @@ The 12 static-fetch refusals were `zomato.com`, `myntra.com`, `sliceit.com`,
 
 ### Step 3 — `npm run contacts:curate -- --all --max-pages 5`. LIVE. Last.
 
-_Filled in below once the run completes._
+Run last on purpose, per the brief: curation only touches qualified leads, so
+running it first would have re-measured the same 57 US/YC companies. It ran
+against 99, of which 42 were new.
+
+99 companies, ~2.5 minutes each (five paths at the 5-second same-host spacing,
+times redirect hops). **207 credits, 6,708 → 6,915**, shared with the §8 probe that
+ran alongside it.
+
+```
+  companies attempted      100
+  pages actually read for   99
+  cut short by the cap       2   <- under-measured, NOT zero-yield
+  walked to the end         97
+  with at least 1 contact   17
+  with a ROLE ALIAS         17 (17 of the fully walked)
+  yielded zero              82
+  total contacts            17
+  by page kind             {"careers":11,"footer":3,"contact":2,"other":1}
+  by contact type          {"careers_alias":14,"talent_alias":3}
+  executives rejected        0
+  refusals by reason       {"injection_detected":9}
+```
+
+Pages actually read per company: 5 for 19 companies, 4 for 27, 3 for 23, 2 for
+13, 1 for 15, 0 for 2. The raised cap did its job.
+
+**The bounds, as a floor and a ceiling:**
+
+- Rating all 99 measured companies gives **17%** — a FLOOR, because 2 were never
+  fully asked.
+- Rating the 97 walked to the end gives **18%** — a CEILING, because the curator
+  stops on its first hit, so yielding is partly a *cause* of being fully walked
+  and the fully-walked subset is biased upward by construction.
+
+**The two bounds are one point apart across 99 companies.** That is the
+difference between this run and F5a's: there, 42 of 56 were cut short and the
+floor and ceiling were 25% and 50%. Here the measurement closed.
+
+**The number moved down, not up.** F5a recorded 25% as the figure the vendor
+decision rested on, and said it was not a measurement. Measured properly — cap
+raised, five paths, 99 companies — it is **17%**. Asking the question more
+completely made the answer worse, which is the opposite of what a truncated
+sample usually does and is worth stating plainly: the 42 newly qualified
+companies contributed 3 contacts between them.
+
+Every one of the 17 is a role alias. Zero named individuals, zero executives
+offered and rejected. 14 `careers_alias`, 3 `talent_alias`. Mean, median and max
+contacts per company are all 1 — no company published more than one route.
+
+**The verdict text still says NO VERDICT**, because it refuses whenever any
+company was truncated and 2 were. That logic was left alone deliberately.
+Collapsing two converged bounds into "buy" or "don't buy" is the vendor decision
+itself, and it is the operator's, not this milestone's. What the milestone owes
+is the number, and the number is 17–18%.
+
+#### One report defect fixed on the way
+
+`companiesTruncatedByBudget` counted `budget_exhausted` refusals over the whole
+audit log, so truncation was permanent: a company cut short under F4's cap of 20
+stayed truncated after F5a raised the cap to 200 and this run walked it to the
+end. The report first printed **44 of 99** and refused a verdict on that basis —
+declining to answer a question it had just finished answering. It now counts only
+refusals belonging to the company's latest walk, and prints 2.
+
+F5a §5 added that counter so a yield would not be quoted from pages nobody
+fetched. Left as it was it produced the mirror error, discarding a measurement
+that had actually been made.
+
+**Still stale, and left as a carry-forward:** the `preflight refusals` line is
+unscoped in time and still reads `budget_exhausted: 100` next to `cut short by
+the cap 2`. Those are not in conflict — one is all-time, one is this walk — but a
+reader cannot tell that from the output.
 
 ## 8. What Indian companies actually use
 
@@ -252,8 +323,11 @@ The operator's own `ats_guess` column is no help either: of 71 Indian rows in
 So the question was answered by re-reading the pages. Read-only, through
 `FetchPolicyGate`, against a wide vendor list used **for reporting only** — no
 `Company.atsSlug` is written, no Evidence is stored, no adapter is built. 108
-companies, **95 credits**, output in `data/india-ats-probe-report.csv` (git-ignored,
-it is run output).
+companies, 86 of them read successfully, output in
+`data/india-ats-probe-report.csv` (git-ignored, it is run output). It ran alongside
+step 3 — zero host overlap with the 99 qualified companies, verified before
+starting — so its credit cost is not separable from step 3's in the global counter;
+the two together spent 207.
 
 Two counts, because they answer different questions: **80** companies where
 `no board signature` was the *governing* cause under F5a's precedence order (F5a
@@ -321,4 +395,63 @@ nothing: this is the input to the decision, not the decision.
 - **No backfill of `Opportunity.description`** over the 2,087 rows that predate
   F5a. Unchanged from F5a carry-forward #2.
 
-## 10. Carry-forwards
+## 10. Live state after this milestone
+
+```
+companies      2,145   (523 researched, 1,622 insufficient_evidence)
+opportunities  4,615   (2,528 with a body, 1,064 with a role track)
+qualified      99      (swe 38, ai_engineer 31, sde 26, ios_android 4)
+contacts       17      (all role aliases, all page_published)
+credits        6,915 / 50,000
+MILESTONE_STAGE  F5, unchanged
+```
+
+Credits spent this milestone: **407.** Step 1 was free.
+
+## 11. Carry-forwards
+
+1. **The Hunter decision is now unblocked.** Tier A's measured yield is **17%
+   floor, 18% ceiling** across 99 companies, with the bounds converged and every
+   contact a role alias rather than a person. The tool refuses the verdict on a
+   technicality (2 truncated companies); the number itself is no longer in doubt.
+   `verdictFromRate` would place 17% in its lowest band. Read a vendor's terms
+   before the seam is exercised — `handover.md` §1.2 as amended.
+2. **Scope a Darwinbox adapter.** §8: 5 of the 33 Indian companies where a vendor
+   was identifiable, against 2 each for Keka, TurboHire, Freshteam and Workday,
+   and zero for Greenhouse and Lever. It is India-native, which is the category
+   B7 said did not exist. Check for a public unauthenticated feed and read robots
+   first — SmartRecruiters is the cautionary case (F5a §3).
+3. **India still needs its own source**, and §8 sharpens why rather than
+   replacing it: **24 of 57** Indian companies published no vendor string at all.
+   No adapter reaches those. Adzuna or data.gov.in, as its own gated
+   mini-milestone.
+4. **Backfill `Opportunity.description`** for the 2,087 rows that predate F5a.
+   Unchanged from F5a #2 and now worth more: the body is read, so every backfilled
+   row is a posting that can carry a track. Needs a forced re-read; a plain
+   `--postings-only` pass reports `content_unchanged` and writes nothing.
+5. **Split the research budget counter.** Unchanged from the F5 handover and now
+   three milestones old. A free static fetch and a paid vendor credit still share
+   one envelope, and F5b spent 407 of it on fetches that cost no money.
+6. **Scope `preflightRefusalsByReason` in time**, the way
+   `companiesTruncatedByBudget` now is. It prints an all-time count beside a
+   per-walk one with no way for a reader to tell them apart (§7, step 3).
+7. **The `ios_android` ceiling is the corpus, not the matcher.** Only 38 of 4,615
+   postings mention a mobile technology in the title. Four qualified leads is
+   close to everything this corpus contains. More mobile leads means a source that
+   indexes mobile employers, not another weight.
+8. **`List-Unsubscribe: <mailto:...>`** in `src/outreach/mail/mime.ts` — the one
+   remaining opt-out gap the operator named for F6. Not touched here.
+
+## 12. Amendments to earlier documents
+
+- **B7, second amendment.** F5a corrected "no India-native ATS exposes a public
+  feed" to "the vendor whose feed they use forbids automated access". §8 shows
+  neither is the shape of the problem: Indian companies are on a **different set
+  of vendors**, led by **Darwinbox**, which is India-native. The practical
+  conclusion is unchanged — India needs its own source — but the reason on record
+  was wrong twice.
+- **`ORCHESTRATOR-HANDOVER.md` §7 carry-forward 2** ("store the Greenhouse posting
+  body") is now fully discharged for new and changed postings. F5a stored it; F5b
+  reads it. The backfill (#4 above) is what remains.
+- **F5a §5's 25%** should not be quoted again. §7 step 3 supersedes it with 17–18%
+  measured over 99 companies.
