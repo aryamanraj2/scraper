@@ -53,6 +53,17 @@ describe('a label is never applied without supporting text (handover.md §5.3, �
     expect(text).toContain(snippet!.snippet.slice(0, 30))
   })
 
+  it('never splits a surrogate pair at either snippet edge (Postgres jsonb rejects the half)', () => {
+    // 'swiftui' sits at index 61, so the 60-char context starts and ends inside an emoji.
+    const text = '🚀' + 'b'.repeat(58) + ' swiftui ' + 'c'.repeat(58) + '🚀 tail'
+    expect(text.indexOf('swiftui')).toBe(61)
+    const snippets = matchTracks(field(text)).matches.flatMap((m) => m.snippets.map((s) => s.snippet))
+    expect(snippets.length).toBeGreaterThan(0)
+    for (const s of snippets) {
+      expect(s).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+    }
+  })
+
   it('records the field a match came from', () => {
     const result = matchTracks([{ field: 'posting:Senior iOS Engineer', text: 'Swift, UIKit, Xcode' }])
     expect(result.matches[0]!.snippets[0]!.field).toBe('posting:Senior iOS Engineer')

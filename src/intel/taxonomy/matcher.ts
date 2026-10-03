@@ -127,8 +127,13 @@ function findOccurrences(haystack: string, phrase: string): number[] {
 }
 
 function snippetAround(text: string, index: number, length: number): string {
-  const start = Math.max(0, index - SNIPPET_CONTEXT)
-  const end = Math.min(text.length, index + length + SNIPPET_CONTEXT)
+  let start = Math.max(0, index - SNIPPET_CONTEXT)
+  let end = Math.min(text.length, index + length + SNIPPET_CONTEXT)
+  // Never cut an emoji's surrogate pair in half: the lone half serializes as a
+  // `\ud83d` escape that Postgres jsonb rejects (22P02), which aborted a whole
+  // `intel:run` on one posting. Shrink inward to the pair boundary.
+  if (/[\uDC00-\uDFFF]/.test(text[start] ?? '')) start += 1
+  if (/[\uD800-\uDBFF]/.test(text[end - 1] ?? '')) end -= 1
   // Whitespace is collapsed because HTML-extracted text carries newlines and runs
   // of spaces that make a snippet unreadable. The WORDS are untouched.
   return text.slice(start, end).replace(/\s+/g, ' ').trim()
