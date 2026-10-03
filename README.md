@@ -1,5 +1,8 @@
 # Internship Outreach Intelligence
 
+[![CI](https://github.com/aryamanraj2/scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/aryamanraj2/scraper/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A local, review-first system that turns a broad universe of startups into a small,
 credible queue of internship opportunities. It prepares applications and drafts;
 it never sends without explicit human approval, and it never submits an application

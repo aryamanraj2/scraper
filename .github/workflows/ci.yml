@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # The suite applies migrations to a real Postgres (test/global-setup.ts runs
+    # `prisma migrate deploy`) rather than `db push`, because two partial unique
+    # indexes on send_attempt cannot be expressed in schema.prisma and db push
+    # would offer to drop them. So CI needs a real database, not a stub.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: outreach_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outreach_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # generated/ is git-ignored, so the Prisma client does not exist until this runs.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # handover.md §1.3: every network request goes through FetchPolicyGate, and this
+      # AST scan is what makes that an invariant rather than a convention. It is first
+      # because it is the cheapest check and the one whose failure matters most.
+      - name: Network policy (AST scan)
+        run: npm run check:no-raw-http
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # vitest directly rather than `npm test`, which would re-run the AST scan above.
+      # test/setup.ts installs an undici MockAgent with net connect disabled, so a code
+      # path that bypassed the gate would open a socket and fail here too.
+      - name: Tests
+        run: npx vitest run
