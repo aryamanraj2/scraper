@@ -13,6 +13,8 @@
  *   npm run ingest:seed -- --postings-only    # refresh boards already detected
  *
  *   npm run ingest:seed -- --from-file data/company-seed.csv
+ *   npm run ingest:seed -- --detect-band-scored            # F5c step 4: boards for the scored band
+ *   npm run ingest:seed -- --backfill-band --seed-only   # F5c: batch 2021+, team 10-250, active; add-only
  *   npm run ingest:seed -- --from-file data/company-seed.csv --report out.csv
  *
  * `--from-file` reads an operator-authored company list instead of the yc-oss feed.
@@ -36,7 +38,8 @@ import { resolve } from 'node:path'
 import { prisma, disconnectPrisma } from '../src/core/db/client.js'
 import { env } from '../src/core/config/config.js'
 import { FetchPolicyGate } from '../src/core/policy/fetch-policy-gate.js'
-import { YcOssSeedProvider, type YcFeed } from '../src/ingest/yc/yc-oss.js'
+import { GROWTH_BAND, YcOssSeedProvider, batchYear, inGrowthBand, type YcFeed } from '../src/ingest/yc/yc-oss.js'
+import { resolveCountries } from '../src/intel/country/normalize.js'
 import { runSeedIngest, type SeedRunResult } from '../src/ingest/yc/seed-loader.js'
 import { canonicalizeDomain } from '../src/ingest/domain/canonicalize.js'
 import {
@@ -53,7 +56,14 @@ function flag(name: string): string | undefined {
 }
 
 const fromFile = flag('from-file')
-const limit = Number(flag('limit') ?? 150)
+/**
+ * F5c: the yc-oss `all` feed filtered to `inGrowthBand`, ADD-ONLY. A record whose
+ * domain is already in the corpus is never handed to the loader, because the yc
+ * upsert rewrites the whole field set and resets `status` to `normalized` — on an
+ * operator-seeded row that would also replace its `seed-track:` tags.
+ */
+const backfillBand = process.argv.includes('--backfill-band')
+const limit = Number(flag('limit') ?? (backfillBand ? Infinity : 150))
 const feed = (flag('feed') ?? 'hiring') as YcFeed
 const seedOnly = process.argv.includes('--seed-only')
 /**
@@ -64,7 +74,16 @@ const seedOnly = process.argv.includes('--seed-only')
  * read the known boards, let the job-count deltas fall out of it.
  */
 const postingsOnly = process.argv.includes('--postings-only')
-const reportPath = flag('report') ?? (fromFile ? 'data/seed-ingest-report.csv' : undefined)
+/**
+ * F5c step 4: detect boards ONLY for growth-band companies the free scoring pass could
+ * already score (`researched`). Feed text alone tops out at 46 against a 55 floor, so
+ * these are the closest to crossing it; measure their lift before spending hours on
+ * the ones that scored nothing. No seeding.
+ */
+const detectBandScored = process.argv.includes('--detect-band-scored')
+const reportPath =
+  flag('report') ??
+  (fromFile ? 'data/seed-ingest-report.csv' : detectBandScored ? 'data/band-detect-report.csv' : undefined)
 
 const db = prisma()
 const config = env()
@@ -99,7 +118,20 @@ const guessByDomain = new Map<string, string>()
 
 let seedResult: SeedRunResult | undefined
 
-if (!postingsOnly) {
+if (detectBandScored) {
+  const scored = await db.company.findMany({
+    where: { status: 'researched', ycBatch: { not: null } },
+    select: { canonicalDomain: true, ycBatch: true },
+  })
+  for (const c of scored) {
+    if (batchYear(c.ycBatch) >= GROWTH_BAND.firstYear) {
+      scopedDomains.push(c.canonicalDomain)
+    }
+  }
+  // An empty scope would fall through to the corpus-wide detection pass below.
+  if (scopedDomains.length === 0) throw new Error('no scored growth-band companies; run intel:run first')
+  console.log(`\nScoped detection to ${scopedDomains.length} scored growth-band companies.`)
+} else if (!postingsOnly) {
   if (fromFile) {
     const path = resolve(fromFile)
     const file = readOperatorSeedFile(path)
@@ -132,6 +164,47 @@ if (!postingsOnly) {
     seedResult = await runSeedIngest(db, new OperatorFileSeedProvider(file), {
       upsert: upsertOperatorSeededCompany,
     })
+  } else if (backfillBand) {
+    const existing = new Set(
+      (await db.company.findMany({ select: { canonicalDomain: true } })).map((c) => c.canonicalDomain),
+    )
+    let outOfBand = 0
+    let alreadyInCorpus = 0
+    console.log(`\nBackfilling the growth band from yc-oss "all", add-only...`)
+    seedResult = await runSeedIngest(
+      db,
+      new YcOssSeedProvider(gate, {
+        feed: 'all',
+        limit,
+        filter: (record) => {
+          if (!inGrowthBand(record)) {
+            outOfBand += 1
+            return false
+          }
+          const canonical = canonicalizeDomain(record.website)
+          if (canonical.ok && existing.has(canonical.domain)) {
+            alreadyInCorpus += 1
+            return false
+          }
+          // Unusable websites still go to the loader, which records the skip.
+          if (canonical.ok) scopedDomains.push(canonical.domain)
+          return true
+        },
+      }),
+    )
+    console.log(`  out of band ${outOfBand}, already in corpus ${alreadyInCorpus} (left untouched)`)
+
+    // Geography is reported, not filtered: `all_locations` is free text.
+    const created = await db.company.findMany({
+      where: { canonicalDomain: { in: scopedDomains } },
+      select: { countries: true },
+    })
+    const byRegion = new Map<string, number>()
+    for (const c of created) {
+      const region = c.countries.length === 0 ? 'blank' : resolveCountries(c.countries).bestRegion
+      byRegion.set(region, (byRegion.get(region) ?? 0) + 1)
+    }
+    console.log(`  by region: ${[...byRegion].map(([r, n]) => `${r} ${n}`).join(' · ')}`)
   } else {
     console.log(`\nSeeding from yc-oss "${feed}" feed, limit ${limit}...`)
     seedResult = await runSeedIngest(db, new YcOssSeedProvider(gate, { feed, limit }))

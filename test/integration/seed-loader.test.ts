@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { seedHostPolicies } from '../../src/core/policy/host-policy.js'
-import { YC_OSS_FEEDS, YcOssSeedProvider, YC_SOURCE_KEYS, type YcSourceKey } from '../../src/ingest/yc/yc-oss.js'
+import { YC_OSS_FEEDS, YcOssSeedProvider, YC_SOURCE_KEYS, inGrowthBand, type YcSourceKey } from '../../src/ingest/yc/yc-oss.js'
 import { runSeedIngest } from '../../src/ingest/yc/seed-loader.js'
 import {
   DEFAULT_COMPANY_CREDITS_CAP,
@@ -369,5 +369,32 @@ describe('every populated field is traceable to an Evidence row', () => {
     // The excerpt is a JSON fragment, so compare on the inner text.
     const quotedPrefix = descriptionRow!.excerpt.slice(0, 120).replace(/^\{"long_description":"/, '')
     expect(withLong!.ycLongDescription!.startsWith(quotedPrefix.split('\\')[0]!)).toBe(true)
+  })
+})
+
+describe('growth band filter (F5c)', () => {
+  const base = { id: 1, name: 'X', batch: 'Summer 2022', team_size: 40, status: 'Active' }
+
+  it('keeps batch 2021 onward at 10-250 people and active — size selects, not year', () => {
+    expect(inGrowthBand(base)).toBe(true)
+    expect(inGrowthBand({ ...base, batch: 'Winter 2021', team_size: 10 })).toBe(true)
+    expect(inGrowthBand({ ...base, batch: 'Spring 2026', team_size: 250 })).toBe(true)
+    expect(inGrowthBand({ ...base, batch: 'Winter 2020' })).toBe(false)
+    expect(inGrowthBand({ ...base, batch: 'Unspecified' })).toBe(false)
+    expect(inGrowthBand({ ...base, team_size: 9 })).toBe(false)
+    expect(inGrowthBand({ ...base, team_size: 251 })).toBe(false)
+    expect(inGrowthBand({ ...base, team_size: null })).toBe(false)
+    expect(inGrowthBand({ ...base, status: 'Acquired' })).toBe(false)
+  })
+
+  it('skips filtered records before the limit counts them', async () => {
+    const records = recordsFromFixture()
+    const inBand = { ...records[0], id: 9101, website: 'https://inband.example', batch: 'Winter 2022', team_size: 30, status: 'Active' }
+    const fetcher = new StubFetcher({ [HIRING_FEED]: { body: JSON.stringify([...records, inBand]) } })
+    const provider = new YcOssSeedProvider(fetcher, { feed: 'hiring', limit: 1, filter: inGrowthBand })
+    const result = await runSeedIngest(testDb(), provider)
+
+    expect(result.created).toBe(1)
+    expect((await testDb().company.findMany()).map((c) => c.canonicalDomain)).toEqual(['inband.example'])
   })
 })

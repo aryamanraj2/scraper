@@ -142,11 +142,42 @@ export function countriesFromLocations(locations: string[]): string[] {
   return out
 }
 
+/**
+ * F5c's growth band: batch 2021 to the latest, 10–250 people, still active.
+ *
+ * The size floor does the selecting, not the batch year (brief §3.2). Median team
+ * size falls from 10 to 2 across 2021–2026, so the floor alone removes the founder-
+ * only companies nobody can mail under non-negotiable #2; an upper year cut on top
+ * of it discarded 207 valid companies in an earlier draft. The 2021 floor is only
+ * because the corpus already holds batch <= 2020.
+ *
+ * Geography is deliberately NOT filtered here: `all_locations` is free text and ~25%
+ * of the band lands in "other", which the operator reviews rather than loses.
+ */
+export const GROWTH_BAND = { firstYear: 2021, minTeam: 10, maxTeam: 250 } as const
+
+/** "Summer 2022" -> 2022; NaN for "Unspecified" or a missing batch. */
+export function batchYear(batch: string | null | undefined): number {
+  return Number(/\b(20\d\d)\b/.exec(batch ?? '')?.[1])
+}
+
+export function inGrowthBand(record: YcCompanyRecord): boolean {
+  return (
+    batchYear(record.batch) >= GROWTH_BAND.firstYear &&
+    typeof record.team_size === 'number' &&
+    record.team_size >= GROWTH_BAND.minTeam &&
+    record.team_size <= GROWTH_BAND.maxTeam &&
+    record.status?.toLowerCase() === 'active'
+  )
+}
+
 export type YcOssSeedProviderOptions = {
   /** `hiring` (~1,480 companies) or `all` (~6,200). */
   feed?: YcFeed
   /** Stops after this many usable records. F1's target is 100-200 companies. */
   limit?: number
+  /** Records failing this are skipped before `limit` counts them. */
+  filter?: (record: YcCompanyRecord) => boolean
   now?: () => Date
 }
 
@@ -202,6 +233,7 @@ export class YcOssSeedProvider implements SeedProvider {
       // A single malformed record is skipped, not fatal: one bad row must not
       // cost the other 1,479.
       if (!parsed.success) continue
+      if (this.opts.filter && !this.opts.filter(parsed.data)) continue
 
       yielded += 1
       yield toSeed(parsed.data, url, fetched.observedAt)
