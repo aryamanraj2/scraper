@@ -154,3 +154,14 @@ desktop.ini
 !README.md
 !handover.md
 !docs/**/*.md
+
+# ---------------------------------------------------------------------------
+# Provider enrichment scratch (F5c §5 step 3a)
+#
+# scratch/run-enrichment.ts and scratch/run-mobile-enrichment.ts drive the Hunter
+# and Snov free tiers with raw `fetch`, outside FetchPolicyGate. They live in the
+# ignored scratch/ above, outside every directory the no-raw-http scanner and the
+# backend typecheck read; under tools/ they turned `npm test` red. The data they
+# gathered goes in through `contacts:import`. Rebuild them behind the Tier B
+# provider seam if the manual monthly path starts to hurt.
+# ---------------------------------------------------------------------------

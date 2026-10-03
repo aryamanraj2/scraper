@@ -11,7 +11,7 @@ const NETWORK_MODULES = [
 ]
 
 export default tseslint.config(
-  { ignores: ['generated/**', 'node_modules/**', 'prisma/migrations/**', '.next/**'] },
+  { ignores: ['generated/**', 'node_modules/**', 'prisma/migrations/**', '.next/**', 'scratch/**'] },
   ...tseslint.configs.recommended,
   {
     // .tsx included from F3: the dashboard's tsconfig has `lib: DOM`, so `fetch` is a
