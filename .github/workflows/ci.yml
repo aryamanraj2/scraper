@@ -30,6 +30,10 @@ jobs:
 
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outreach_test
+      # prisma.config.ts resolves `env('DATABASE_URL')` at config load, so every
+      # prisma invocation needs it present even though the test suite only reads
+      # TEST_DATABASE_URL. Locally it comes from .env, which CI does not have.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outreach_test
 
     steps:
       - uses: actions/checkout@v4
