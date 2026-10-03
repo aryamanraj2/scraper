@@ -87,13 +87,22 @@ prisma/*.db-journal
 #
 #   *-report.csv   run output. Regenerated on every `ingest:seed --from-file` and
 #                  every `contacts:import --report`, so committing it is churn.
-#   contacts*.csv  named individuals' work email addresses, gathered from a lookup
+#   *contacts*.csv named individuals' work email addresses, gathered from a lookup
 #                  provider. `origin` is a public GitHub repository. A10 treats a
 #                  contact as personal data that must be erasable; a copy in git
-#                  history is the one place an erasure cannot reach.
+#                  history is the one place an erasure cannot reach. The glob is
+#                  loose on both sides because a provider run names its own output
+#                  (`mobile-contacts.csv`, `salesql-contacts.csv`) and a rule
+#                  anchored to one filename silently stops covering the next one.
+#   *-cache/       raw provider payloads, which hold every address a lookup
+#                  returned and not only the ones a run picked.
+#   *targets*.csv  the company lists those runs were driven from, which carry the
+#                  same provider-derived personal data in their notes columns.
 # ---------------------------------------------------------------------------
 data/*-report.csv
-data/contacts*.csv
+data/*contacts*.csv
+data/*targets*.csv
+data/*-cache/
 
 # ---------------------------------------------------------------------------
 # Editors and OS
