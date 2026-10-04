@@ -116,17 +116,37 @@ const db = prisma()
 }
 
 // 4. The executive filter, run against every stored contact.
+//
+// The intent is "no executive is TARGETABLE", not "no executive row is stored" — F6
+// deviation (F7-HANDOVER §4): the F6 backfill re-ran a widened filter and RETIRED the one
+// row it newly refused, keeping the record rather than deleting it. So a flagged contact
+// passes only when it is `retired` AND carries its retirement audit row. Every other
+// status fails, `suppressed` included: suppression is a decision about the recipient's
+// wishes or a bounce, not about §1.1, and must not stand in for it.
 {
   const { isExecutiveContact } = await import('../src/outreach/contacts/executive-filter.js')
-  const contacts = await db.contact.findMany({ select: { emailNormalized: true, publicTitle: true } })
+  const { RETIRE_ACTION } = await import('../src/outreach/contacts/verify-backfill.js')
+  const contacts = await db.contact.findMany({ select: { id: true, emailNormalized: true, publicTitle: true, status: true } })
   const executives = contacts.filter((c) => isExecutiveContact(c.emailNormalized, c.publicTitle).isExecutive)
+  const retiredWithAudit = new Set(
+    (
+      await db.auditLog.findMany({
+        where: { action: RETIRE_ACTION, subjectType: 'Contact', subjectId: { in: executives.map((c) => c.id) } },
+        select: { subjectId: true },
+      })
+    ).map((a) => a.subjectId),
+  )
+  const targetable = executives.filter((c) => c.status !== 'retired')
+  const unaudited = executives.filter((c) => c.status === 'retired' && !retiredWithAudit.has(c.id))
   checks.push({
-    name: 'No founder/CEO/executive contact exists (§1.1)',
-    ok: executives.length === 0,
+    name: 'No founder/CEO/executive contact is targetable (§1.1)',
+    ok: targetable.length === 0 && unaudited.length === 0,
     detail:
-      executives.length === 0
-        ? `${contacts.length} stored contact(s), 0 executives — §1.1 is the boundary of the operator's F4 amendment and was NOT amended`
-        : `FOUND ${executives.length} executive contact(s)`,
+      `${contacts.length} stored contact(s), ${executives.length} flagged by the filter: ` +
+      `${executives.length - targetable.length - unaudited.length} retired with a ${RETIRE_ACTION} audit row, ` +
+      `${unaudited.length} retired WITHOUT one, ${targetable.length} NOT retired` +
+      (targetable.length ? ` (statuses: ${targetable.map((c) => c.status).join(',')})` : '') +
+      ` — §1.1 is the boundary of the operator's F4 amendment and was NOT amended`,
   })
 }
 

@@ -38,8 +38,9 @@ import type { ReasonCodeValue } from '../reason-codes/registry.js'
  * ## Why verification is the gate
  *
  * An unverified contact is one this system did not read off the employer's own page
- * and did not receive from a verified provider — in practice, a pattern-inferred
- * address. Those open **no** case at all. That is what makes
+ * and that no provider attested — a pattern-inferred address, or an imported
+ * lookup-provider row whose `email_status` was anything but exactly `valid`
+ * (`src/outreach/contacts/import.ts`, F6-DECISIONS §3.1). Those open **no** case at all. That is what makes
  * `CONTACT_ALLOW_PATTERN_INFERENCE` safe to expose: the flag can produce candidate
  * rows for the operator to confirm by hand, and they can never become a send target on
  * their own.

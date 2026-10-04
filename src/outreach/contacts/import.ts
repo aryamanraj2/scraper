@@ -23,11 +23,22 @@ import { isExecutiveContact } from './executive-filter.js'
  * no request was made, no vendor terms were accepted by this code, and nothing here
  * proves an address is deliverable.
  *
- * So every row lands as `verified = false`, and an unverified contact opens **no
- * outreach case** (`src/core/policy/outreach-case.ts`). These are candidates for the
- * operator to confirm, not send targets. Importing a thousand of them cannot, by
- * itself, cause a single message to be sent — which is the property that makes the
- * path safe to have at all.
+ * So a row lands as `verified = false` — and an unverified contact opens **no
+ * outreach case** (`src/core/policy/outreach-case.ts`) — unless the provider itself
+ * attested the address. These are candidates for the operator to confirm, not send
+ * targets. Importing a thousand of them cannot, by itself, cause a single message to be
+ * sent: even a verified contact still needs a draft, the Quality Gate and an individual
+ * human approval.
+ *
+ * ## The one exception: the provider's own `valid` verdict (F6)
+ *
+ * The operator decided in F6 (`docs/F6-DECISIONS.md` §3.1) that a lookup provider's
+ * SMTP verdict of exactly `valid` makes the row `verified = true`. The optional
+ * `email_status` column carries it, and {@link providerAttestsDeliverable} is the only
+ * place the rule lives — the importer and the F6 backfill
+ * (`verify-backfill.ts`) both call it, so they cannot disagree. `accept_all` is NOT
+ * a pass: it means the domain accepts every address, which is no verdict at all.
+ * Blank, misspelt or any other token is not a pass either; the rule fails closed.
  *
  * ## The three refusals, and why each survives the change of source
  *
@@ -65,9 +76,26 @@ export const CONTACT_IMPORT_COLUMNS = [
   'provider',
   'source_url',
   'notes',
+  // Optional. The provider's SMTP verdict, verbatim — see providerAttestsDeliverable.
+  'email_status',
 ] as const
 
 export const CONTACT_IMPORT_REQUIRED = ['domain', 'email'] as const
+
+/** The one provider verdict that verifies a contact (F6-DECISIONS §3.1). */
+export const PROVIDER_VALID_VERDICT = 'valid'
+
+/**
+ * Whether a provider's `email_status` cell attests the address is deliverable.
+ *
+ * Exact match on the cell as written, deliberately: no trimming, no case folding.
+ * `Valid`, `valid ` and `valid?` are things the operator or the vendor did not write
+ * as the verdict, and a near-miss promoted to `verified` is a send to an address
+ * nobody vouched for. `accept_all` is refused for the reason in the module comment.
+ */
+export function providerAttestsDeliverable(emailStatus: string | undefined): boolean {
+  return emailStatus === PROVIDER_VALID_VERDICT
+}
 
 /**
  * A hand-transcribed provider result. Below the 0.9 a page-read address carries,
@@ -333,14 +361,18 @@ async function importRow(
     fetchedVia: FETCHED_VIA.userHint,
   })
 
+  const emailStatus = row.cells['email_status']
+  const verified = providerAttestsDeliverable(emailStatus)
+
   const created = await db.contact.create({
     data: {
       companyId: company.id,
       emailNormalized: email,
       contactType,
-      // The whole safety story of this path. Nothing here was verified by this system,
-      // so nothing here opens an outreach case until the operator confirms it.
-      verified: false,
+      // The whole safety story of this path. Nothing here was verified by THIS system,
+      // so the row opens no outreach case unless the provider attested it `valid`
+      // (F6-DECISIONS §3.1). The verdict stays readable in the Evidence excerpt above.
+      verified,
       discoveryMethod: 'lookup_provider',
       // Tier A's page-kind attribution is meaningless for a row nobody fetched, and a
       // value like `other` would quietly enter the yield report as if a page had been
@@ -363,7 +395,8 @@ async function importRow(
       companyId: company.id,
       contactType,
       discoveryMethod: 'lookup_provider',
-      verified: false,
+      verified,
+      emailStatus: emailStatus ?? null,
       provider,
       sourceUrl: operatorEntrySource(provider, opts.operator),
     },

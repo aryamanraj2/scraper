@@ -1,6 +1,6 @@
 You are building milestone F6 of an existing, in-progress TypeScript project.
-F0, F1, F2, F3, F4 and F5 are complete and verified. F5's work is UNCOMMITTED in the
-working tree. Do not start over, do not redesign the plan, do not rebuild what
+F0, F1, F2, F3, F4 and F5 are complete, verified and committed, and so are the
+F5a/F5b/F5c mini-milestones that followed. Do not start over, do not redesign the plan, do not rebuild what
 already exists, and do not touch anything outside F6.
 
 REPO: /Users/aryamanjaiswal/Documents/ChatGPT/scraper   (branch main)
@@ -30,7 +30,13 @@ REPO: /Users/aryamanjaiswal/Documents/ChatGPT/scraper   (branch main)
   7. docs/F5-HANDOVER.md         — what F4 built, F4's TWELVE deviations, and the
      measured Tier A yield number (§2.2), which is still the binding constraint.
 
-  8. docs/F6-HANDOVER.md         — ** YOUR PRIMARY BRIEF. ** What F5 built, F5's
+  8. docs/F6-DECISIONS.md        — ** READ BEFORE F6-HANDOVER. ** Live state as of
+     2026-10-04, the operator's four F6 decisions (contact verification, opt-out,
+     inbox, caps), the build order, and how the pilot will be read. Where it
+     disagrees with F6-HANDOVER on a number or a decision, IT WINS. Every state
+     figure in F6-HANDOVER is three weeks stale.
+
+  9. docs/F6-HANDOVER.md         — ** YOUR PRIMARY DESIGN BRIEF. ** What F5 built, F5's
      FOURTEEN deviations, and the F6 task. Structure:
         §2.1  where the corpus actually stands — read the warning, it matters
         §2.3  ** A9 DOES NOT HOLD ON GMAIL. Read this before touching the send
@@ -45,12 +51,12 @@ REPO: /Users/aryamanjaiswal/Documents/ChatGPT/scraper   (branch main)
         §8.2  ** BEFORE YOU ENABLE SENDING — read it twice **
         §10   open questions
 
-  9. docs/handoff-llm-gateway.md — how the LLM role works. The app never calls a
+ 10. docs/handoff-llm-gateway.md — how the LLM role works. The app never calls a
      model. It writes an LlmTask row and a Claude Code session drains it via a
      schema-validating CLI. Has "As built" sections for F2, F3, F4 and F5 — F5's
      records the one place it DECLINED to use the gateway, and why.
 
- 10. README.md                   — setup and the things that bite.
+11. README.md                   — setup and the things that bite.
 
 All 65 recorded deviations across F0–F5 are still in force. Do not silently
 revert any of them. If you disagree with one, raise it with the user.
@@ -112,35 +118,17 @@ examples of getting this wrong, the second one on the reconciliation path itself
 4. WHERE THE PROJECT STANDS — verify these yourself before starting
 ═══════════════════════════════════════════════════════════════════════════
 
-  npm test          → 38 files, 538 tests passed
-  npm run typecheck → clean   (runs TWO configs — see §5)
-  npm run lint      → clean
-  npm run build     → clean   (Next 16.3.4, webpack)
-  npm run verify:f0 → 4/4     npm run verify:f1 → 7/7
-  npm run verify:f2 → 7/7     npm run verify:f3 → 11/11
-  npm run verify:f4 → 13/13   npm run verify:f5 → 15/15
+docs/F6-DECISIONS.md §1 carries the measured state as of 2026-10-04. Re-measure
+it yourself before you start. In short: 3,085 companies, 154 qualified, 126
+contacts (17 verified), 4 drafts, 0 SendAttempt, MILESTONE_STAGE = 'F5', both
+send flags false, 604 tests green, CI green on main.
 
-  MILESTONE_STAGE = 'F5'  ← correct. Raising it to 'F6' is one of the two acts
-                            that let this system email a stranger.
+  MILESTONE_STAGE = 'F5'  <- correct. Raising it to 'F6' is one of the two acts
+                            that let this system email a stranger, and it is the
+                            LAST step of the build order, as its own commit.
 
-LIVE DATA in outreach_dev:
-  1,975 companies · 149 with a detected ATS board · 2,086 Opportunity rows
-  27,839 Evidence rows
-  69 scored leads (21 queue-band) ← STILL THE OLD 150-COMPANY CORPUS
-  37 ApplicationPacket · 55 ApprovedClaim · 5 ResumeVersion · 1 ResearchBrief
-  1 CandidateProfile (complete)
-  4 Contact rows   ← all Tier A, all read off employer pages, all verified
-  4 Draft rows     ← 1 approved, 3 held by the gate
-  0 SendAttempt    ← F6 writes the first real one
-  25 LlmTask (2 fulfilled, 22 pending, 1 rejected)
-
-** The corpus was widened 13× and NEVER RE-SCORED. ** `npm run intel:run` scores
-from stored rows and touches no network. It is the cheapest high-value action
-available and F6-HANDOVER §8.4 says so. Do it before drawing any conclusion about
-pilot supply.
-
-GIT: five commits on main. ALL F5 WORK IS UNCOMMITTED. The user commits on their
-own instruction, not on your schedule.
+GIT: main is pushed and clean. The user commits on their own instruction, not on
+your schedule.
 
 ═══════════════════════════════════════════════════════════════════════════
 5. ENVIRONMENT TRAPS — these have each cost real time
@@ -186,21 +174,27 @@ and no `nodemailer`, because both own their own HTTP transport.
 6. YOUR TASK — F6 ONLY
 ═══════════════════════════════════════════════════════════════════════════
 
-Read docs/F6-HANDOVER.md §8 for the full statement. In summary:
+The ORDER is docs/F6-DECISIONS.md §4, and step 1 there (the contact
+verification backfill) comes before everything below, because without it the
+pilot can mail 17 generic inboxes. The full statement of the items below is
+docs/F6-HANDOVER.md §8. In summary:
 
-  1. The follow-up. Exactly one, 7–10 business days after the first touch, then
-     stop. QUEUES.followUp, SendAttempt.touchNumber and cancelScheduledSends all
-     exist and nothing schedules anything yet. Every stop reason must CANCEL it —
-     A12: a paused job resumes on restart and sends the mail the operator
-     stopped.
+  1. ** NO automated follow-up and NO reply draft. ** The operator decided the
+     system sends the first message only and they handle everything after it by
+     hand (F6-DECISIONS §3.3). F6-HANDOVER §8.1 items 1 and 3 are DROPPED.
+     Record that as a deviation from Part F. Do not schedule anything on
+     QUEUES.followUp.
   2. The ramp, gated on MEASURED first-party signals, never on a calendar.
      capsForStage returns F6 week one (5/day, 3/domain). Part G's rollout
      criteria are the gate for 5→10 and 10→20; the counters already exist.
-  3. The reply draft — handover.md §5's Inbox/Outcome Worker's second job, and
-     the place the LLM gateway genuinely belongs (F6-HANDOVER §4.6).
+  3. Reply/bounce INGESTION stays: `send:run` runs the existing inbox ingestion
+     before it sends, so bounces and opt-outs are counted and suppressed before
+     the ramp reads them (F6-DECISIONS §3.3).
   4. The dashboard's send queues. F3 §4.14's rule stands: a queue a later
      milestone fills renders "not built", never 0.
-  5. The pilot measurement: 50 companies, and the numbers Part G actually needs.
+  5. The pilot measurement: every sendable qualified company (36 measured, NOT
+     50; do not widen the corpus to reach 50), reported per arm (named vs alias)
+     and per provider, read as F6-DECISIONS §5 says.
   6. tools/verify-f6.ts, with isAtOrAfter and FLOORS ONLY — F6-HANDOVER §4.9
      records three verifiers that broke because they asserted a ceiling.
   7. docs/F7-HANDOVER.md.
@@ -271,13 +265,14 @@ any scenario you inherit depends on F5 being the current stage.
   • Ask before anything irreversible or outward-facing. ** F6 sends to people who
     did not ask to hear from us. Every send is both. ** Nine commands now touch a
     live source: ingest:seed, fixtures:record, intel:run --research N,
-    contacts:curate, gmail:auth, send:test, send:run, inbox:sync, and whatever F6
-    adds for the follow-up.
+    contacts:curate, gmail:auth, send:test, send:run, inbox:sync.
   • ** STOP FOR REVIEW BEFORE F7. ** Finish F6, run the pilot only as far as the
     operator authorises, write docs/F7-HANDOVER.md, and stop.
   • Git: commit on the user's instruction, not on your own schedule.
+  • ** No subagents. ** A previous session fanned out to nine and burned the
+    operator's spend limit twice. Do the work in this chat.
 
-Start by reading the ten documents in section 1 — F6-HANDOVER most carefully, and
+Start by reading the eleven documents in section 1 — F6-HANDOVER most carefully, and
 §2.3 and §4.4 before anything else — then confirm your understanding of what is
 already built and what remains, and flag anything you think is wrong BEFORE
 writing code.

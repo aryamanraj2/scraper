@@ -7,13 +7,14 @@
  *   npm run contacts:import -- --file data/contacts.csv --dry-run
  *   npm run contacts:import -- --file data/contacts.csv --report data/contact-import-report.csv
  *
- * Header: domain,email,full_name,title,contact_type,provider,source_url,notes
+ * Header: domain,email,full_name,title,contact_type,provider,source_url,notes[,email_status]
  * Required: domain,email. Everything else may be blank.
  *
  * **This command touches no network.** It is the only contact path in the project that
  * does not, because the lookup happened in a browser and the operator typed the result.
- * That is also why every row lands `verified = false` and opens no outreach case: see
- * the module comment in `src/outreach/contacts/import.ts`.
+ * That is also why a row lands `verified = false` and opens no outreach case unless its
+ * optional `email_status` is exactly `valid` (F6-DECISIONS §3.1): see the module
+ * comment in `src/outreach/contacts/import.ts`.
  *
  * Rows are refused for three reasons and each is reported rather than dropped —
  * executives (`handover.md` §1.1, unamended), addresses off the company's domain, and

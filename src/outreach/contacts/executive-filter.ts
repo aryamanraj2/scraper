@@ -25,6 +25,9 @@
  * Executive title patterns. Word-anchored, because substring matching turns
  * "Head of..." into a match inside "Overhead" and "VP" into a match inside "VPN".
  */
+export const HEAD_OF_FUNCTION =
+  /\bhead\b[\s\p{P}]*(?:of\b[\s\p{P}]*)?(engineering|product|people|talent|hr|operations|design|marketing|sales|finance|legal)\b/iu
+
 const EXECUTIVE_TITLE_PATTERNS: RegExp[] = [
   /\bfounder(s)?\b/i,
   /\bco[- ]?founder(s)?\b/i,
@@ -41,7 +44,12 @@ const EXECUTIVE_TITLE_PATTERNS: RegExp[] = [
   /\bchair(man|woman|person)?\b/i,
   /\bproprietor\b/i,
   /\bowner\b/i,
-  /\bhead of (engineering|product|people|talent|hr|operations|design|marketing|sales|finance|legal)\b/i,
+  // "Head" + optional punctuation/whitespace + optional "of" + a function word. F6
+  // widened this from a literal `head of `: a provider export wrote Rapido's head of
+  // talent as "Head -Talent Acquisition", which the old rule passed. Titles are typed by
+  // people and vendors, so the separator is noise and the function word is the signal.
+  // `\bhead\b` keeps "Overhead" and "Headspace" out.
+  HEAD_OF_FUNCTION,
 ]
 
 /**

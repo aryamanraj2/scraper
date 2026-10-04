@@ -155,6 +155,27 @@ describe('executive filter (handover.md §1.1)', () => {
     }
   })
 
+  it('rejects a head of a function whatever separator the title uses (F6)', () => {
+    for (const title of [
+      'Head -Talent Acquisition',
+      'Head: Engineering',
+      'Head of Talent',
+      'Head - Product',
+      'Head, People',
+      'Head of - Engineering',
+    ]) {
+      expect(isExecutiveContact('someone@acme.com', title).isExecutive, title).toBe(true)
+    }
+  })
+
+  it('does not read "head" inside another word, in a title or an address', () => {
+    for (const title of ['Overhead Line Engineer', 'Headspace iOS Engineer', 'Headless CMS Engineer']) {
+      expect(isExecutiveContact('jane.doe@acme.com', title).isExecutive, title).toBe(false)
+    }
+    expect(isExecutiveContact('jane.doe@headspace.com', 'Staff iOS Engineer').isExecutive).toBe(false)
+    expect(isExecutiveContact('headspace@acme.com', null).isExecutive).toBe(false)
+  })
+
   it('does not fire on words that merely contain an executive token', () => {
     for (const title of ['Overhead Line Engineer', 'VPN Infrastructure Engineer', 'Presidential Scholar Program Lead']) {
       const v = isExecutiveContact('jane.doe@acme.com', title)
