@@ -107,9 +107,11 @@ export function classifyBounce(message: {
 export type ReplyClassification = 'opt_out' | 'wrong_contact' | 'auto_reply' | 'reply'
 
 /**
- * The opt-out line this system sends is *"If you'd rather I didn't write again, say so
- * and I won't."* — B4's voluntarily-adopted control, and H6's reason for preferring a
- * human sentence over RFC 8058's one-click header at this volume.
+ * Drafts composed before F6 carried an explicit opt-out line (`signoff.plain@1`, B4).
+ * From F6 the message carries none (`signoff.plain@2`, F6-DECISIONS §3.2): the opt-out
+ * mechanism is whatever the recipient writes back, and this classifier is the only
+ * thing that reads it. That is why recall matters more here than it did when the
+ * message spelled out what "saying so" looks like.
  *
  * A human sentence has to be read by something. These patterns are deliberately narrow
  * for the same reason F2 §4.12's injection patterns are: *"ignore" alone is a normal

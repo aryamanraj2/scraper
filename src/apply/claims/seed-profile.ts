@@ -96,8 +96,8 @@ export async function seedCandidateProfile(
     // Deliberately null — see the header. Not a gap in the data, a gap in the column.
     availabilityFrom: null,
     availabilityTo: null,
-    // `signature` stays null: no sentence template reads it (signoff.plain@1 renders
-    // the name and the opt-out line), and a column nothing consumes is not a fact.
+    // `signature` stays null: no sentence template reads it (signoff.plain@2 renders
+    // the name alone), and a column nothing consumes is not a fact.
     signature: null,
   }
 

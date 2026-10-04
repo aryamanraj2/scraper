@@ -97,11 +97,26 @@ export const SENTENCE_TEMPLATES: SentenceTemplate[] = [
   {
     id: 'signoff.plain@1',
     role: 'signoff',
+    // RETIRED for composition (F6), and kept registered on purpose. Stored drafts cite
+    // this id: `validateComposition` refuses an unregistered templateId, so deleting it
+    // would fail every stored @1 draft at the gate and in `verify:f4`. Never edit the
+    // rendered text either — a stored sentence must stay what this id renders.
+    //
     // handover.md §8 and B4: accurate sender identity, and an easy way to decline. The
     // opt-out line is adopted voluntarily (B4) rather than because a regime was found
     // to apply, and it is deliberately a human sentence rather than RFC 8058's
     // one-click header, which H6 reserves for bulk volume this system never reaches.
     render: (v) => `${v.candidateName}\n\nIf you'd rather I didn't write again, say so and I won't.`,
+  },
+  {
+    id: 'signoff.plain@2',
+    role: 'signoff',
+    // F6-DECISIONS §3.2, the operator's call: the mail should read as hand-written, and
+    // nobody signs a one-off note with a decline line. Sender identity stays accurate
+    // (the name here, the From header). The opt-out mechanism is the reply itself —
+    // `classifyReply` reads "stop" or "not interested" as an opt-out (recall over
+    // precision) and suppresses, and the system sends each person one message only.
+    render: (v) => v.candidateName,
   },
 ]
 

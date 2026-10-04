@@ -109,8 +109,8 @@ describe('classifyBounce', () => {
 
 describe('classifyReply', () => {
   it('reads an answer to our own opt-out line as an opt-out', () => {
-    // The sentence this system actually sends is "If you'd rather I didn't write
-    // again, say so and I won't." These are what "saying so" looks like.
+    // Pre-F6 drafts said "If you'd rather I didn't write again, say so and I won't."
+    // F6 drafts say nothing (signoff.plain@2), so an unprompted "stop" must read too.
     for (const body of [
       "I'd rather you didn't write again, thanks.",
       'Please do not contact me again.',

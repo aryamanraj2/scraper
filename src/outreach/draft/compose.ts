@@ -382,7 +382,7 @@ export function deterministicComposition(
         ? 'ask.route_unclear@1'
         : 'ask.intern_availability@1'
   sentences.push(template(askId, 'ask', vars))
-  sentences.push(template('signoff.plain@1', 'signoff', vars))
+  sentences.push(template('signoff.plain@2', 'signoff', vars))
 
   return {
     subject: `Internship enquiry — ${vars.companyName}`,

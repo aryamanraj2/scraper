@@ -117,9 +117,10 @@ those."*
   recompute.
 - **The opt-out mechanism is the reply.** Someone who answers "stop" or "not interested"
   is classified `opt_out` by the existing deterministic classifier (recall over
-  precision, F6-HANDOVER §4.6), and suppressed. The design itself bounds exposure: two
-  touch per person (§3.3), then nothing.
-- **Record this as a deviation** from B4's voluntarily adopted decline line. The
+  precision, F6-HANDOVER §4.6), and suppressed. The design itself bounds exposure: one
+  message per person from the system (§3.3), then nothing.
+- **Record this as a deviation** from B4's voluntarily adopted decline line **and from
+  H6**, which rejects the one-click header but says to "use a plain human opt-out line". The
   reasoning: one message per person, a reply classifier that suppresses, and the
   operator's call. The orchestrator raised it once and the operator decided.
 
@@ -234,3 +235,81 @@ form, and the browser layer.
 One note for after the pilot: Hunter and Snov's free quotas were spent on hand-picked
 mobile companies: only 5 of Hunter's 12 companies and 3 of Snov's 13 qualify. Future free-tier lookups
 should target the 154 qualified companies. That is F7-or-later work, not F6.
+
+---
+
+## 8. Progress log: read this first in a fresh chat
+
+### Step 1 — DONE, commit `88d6e3f` (2026-10-04)
+
+Measured after `--write`: 75 contacts flipped (hunter 17, snov 19, salesql 39), 1 retired
+(the Rapido talent-acquisition contact, caught by the widened "Head" rule), 92 verified in
+total. **33 sendable qualified companies**, not 36: 15 alias-only, 16 named-only, 2 both.
+`jurisdiction.ts` refuses 8 lookup-provider contacts at Germany 5, Finland 2 and UK 1
+companies, because no UK/EU review is recorded. **The operator decided to accept 33 and
+not record a review.** `verify:f4` criterion 4 now asserts no executive is *targetable*.
+619 tests green. Deviations are drafted in `docs/F7-HANDOVER.md` §4.1–§4.4 and §10.
+
+**Do not put a real contact's name or address in any committed file.** The repo is
+public. Use invented addresses in tests and descriptions ("the Rapido contact") in docs.
+
+### Decisions already taken for the remaining steps
+
+The operator approved these in the step-1 chat. Do not re-ask.
+
+**Step 3, re-composing.** Add a single-draft "revoke approval" command: by `--id`,
+audited, moving approved → composing only, never forward, no bulk path. It exists for
+the one approved draft, `compose.ts` skips anything with `approvedAt` set. The 3
+`gate_failed` drafts were never approved and re-compose in place. They still need their
+sentences written through the LLM gateway and must pass the Quality Gate. **The
+approval view must show the contact's title prominently,** so the operator can skip
+non-recruiter, non-engineer rows (some verified SalesQL rows are, for example, an IT
+Asset Manager). Directors are deliberately not excluded.
+
+**Step 4, ingestion, plus four defects found in the step-1 chat. Fix all of them in this
+step:**
+
+1. *Double counting.* `Bounce` and `OptOut` have no provider-message-id uniqueness
+   (`Reply` does). With a 7-day read window running before every batch, one real bounce
+   becomes several rows, trips the breaker's absolute limit of 3, and corrupts the
+   counters. Add a unique `provider_message_id` to both. Generate the migration with
+   `prisma migrate diff --script`, read the SQL, then `migrate deploy`. **Never db push.**
+   Both tables currently have 0 rows. Pin it with a test: the same bounce ingested 3 times
+   gives 1 row, and the breaker is not tripped.
+2. *Truncated listing.* `tools/run-inbox.ts:85` calls `listInbox(query, 50)` with no
+   pagination. Restrict the query to threads we sent plus mailer-daemon/postmaster,
+   paginate, and **refuse the send batch if the listing was cut off.** A check that
+   could not look must not report "nothing found".
+3. *Counters cannot express the ramp.* There is no wrong-contact count, and `replies`
+   includes auto-replies and opt-outs. Break counts down by reply classification. No
+   migration needed.
+4. *Dead matching routes.* In `matchSendAttempt` (`src/outreach/send/ingest-outcomes.ts`),
+   both the `In-Reply-To` route and the body-scan fallback look for our `<oi.…>`
+   Message-ID, which Gmail rewrites (F6-HANDOVER §2.3). Only thread matching works
+   today. Make the body scan match the `X-Outreach-Ref` value, and if it is cheap, store
+   Gmail's rewritten Message-ID after the send so `In-Reply-To` can match it. Record
+   whichever you do.
+
+Then `send:run` runs ingestion before every batch, as §3.3 says.
+
+**Step 8, the stage commit.** `test/policy/owned-inbox.test.ts`'s test "the build we ship
+cannot reach an external recipient by config alone" reads `MILESTONE_STAGE` and will fail
+at F6. Rewrite it in the same commit to the property that survives (both factors are still
+required), in the F6-HANDOVER §4.9 shape.
+
+### Step 2 — DONE (2026-10-04)
+
+`signoff.plain@2` renders only the operator's name. `@1` stays registered and its text is
+pinned, because the Quality Gate and `verify:f4` re-validate stored compositions against
+the registry. (The approval hash covers stored sentence text plus the template id, not a
+fresh rendering.) New drafts use `@2`. Three new tests: exact text of both versions, a
+new draft carries `@2` with no decline line, and an approved `@1` draft still validates
+and its hash still matches. The deviation is in F7-HANDOVER §4.5 (B4 and H6). 622 tests
+green, `verify:f4` 13/13.
+
+### Remaining, in order
+
+3 re-compose and revoke → 4 ingestion and the fixes above → 5
+signal-gated ramp → 6 dashboard send queues → 7 `verify-f6` → 8 stage commit. The operator
+chose to build all of them, step by step. Stop after each step for an orchestrator
+checkpoint. **Do not commit.** The operator commits.

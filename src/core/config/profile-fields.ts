@@ -24,7 +24,7 @@ import type { ReasonCodeValue } from '../reason-codes/registry.js'
  *
  * | Field | Consumed by |
  * |---|---|
- * | `fullName` | the sign-off template `signoff.plain@1`, which renders the operator's name |
+ * | `fullName` | the sign-off template `signoff.plain@2`, which renders the operator's name |
  * | `senderIdentity` | the `From` header, and A7's hash — this is whose name is on the message |
  * | `replyToEmail` | the `Reply-To` header. B4's voluntarily-adopted controls require *"accurate sender identity and a real reply-to"*, and §8.5 makes a monitored reply-to a precondition for the milestone |
  *
@@ -40,8 +40,8 @@ import type { ReasonCodeValue } from '../reason-codes/registry.js'
  * - **`location`, `workAuthorization`, `links`.** Real facts, all present as
  *   `ApprovedClaim` rows, none of which appears in an outbound message. They are
  *   populated for completeness and are not gates.
- * - **`signature`.** No template reads it; `signoff.plain@1` renders the name and the
- *   opt-out line. Requiring an unused column is a gate on nothing.
+ * - **`signature`.** No template reads it; `signoff.plain@2` renders the name alone.
+ *   Requiring an unused column is a gate on nothing.
  *
  * ## `isComplete` is a cache, never the authority
  *

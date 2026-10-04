@@ -6,7 +6,7 @@ import { composeDrafts, gateDraft } from '../../src/outreach/draft/compose.js'
 import { queueOutreachDraft, applyOutreachDraft } from '../../src/outreach/draft/queue-draft.js'
 import { approveDraft, verifyApprovalHash } from '../../src/outreach/draft/approve.js'
 import { validateComposition, renderBody, type DraftComposition } from '../../src/outreach/draft/message.js'
-import { TEMPLATE_IDS } from '../../src/outreach/draft/templates.js'
+import { renderTemplate, TEMPLATE_IDS } from '../../src/outreach/draft/templates.js'
 import { checkJurisdiction } from '../../src/outreach/draft/jurisdiction.js'
 import { runQualityGate } from '../../src/outreach/draft/quality-gate.js'
 import { selectContactSlots } from '../../src/outreach/draft/slots.js'
@@ -526,6 +526,58 @@ describe('approval_hash is frozen and compared byte-for-byte (A7)', () => {
     await composeDrafts(db)
     const after = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { bodyText: true } })
     expect(after.bodyText).toBe(before.bodyText)
+  })
+})
+
+describe('the sign-off: @2 composes, @1 still resolves (F6-DECISIONS §3.2)', () => {
+  const vars = { companyName: 'Acme', roleTitle: null, resumeUrl: 'https://cv.example/r.pdf', candidateName: 'Test Candidate' }
+
+  it('pins both renderings — @1 must never drift from what stored drafts carry', () => {
+    expect(renderTemplate('signoff.plain@1', vars)).toBe(
+      "Test Candidate\n\nIf you'd rather I didn't write again, say so and I won't.",
+    )
+    expect(renderTemplate('signoff.plain@2', vars)).toBe('Test Candidate')
+  })
+
+  it('composes new drafts with @2, and no decline sentence reaches the body', async () => {
+    const { db } = await world()
+    await composeDrafts(db)
+    const draft = await db.draft.findFirstOrThrow({ select: { composition: true, bodyText: true } })
+    const signoffs = (draft.composition as DraftComposition).sentences.filter((s) => s.role === 'signoff')
+    expect(signoffs.map((s) => s.templateId)).toEqual(['signoff.plain@2'])
+    expect(draft.bodyText).not.toMatch(/write again/i)
+  })
+
+  it('a stored @1 approval still validates and its hash still recomputes', async () => {
+    // The pre-F6 drafts in the live database cite @1. Unregistering it would fail them
+    // at validateComposition; this pins that a frozen @1 approval survives @2 landing.
+    const { db } = await world()
+    await composeDrafts(db)
+    const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
+    const queued = await queueOutreachDraft(db, draft.id)
+    if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
+    await fulfilDraftTask(queued.taskId)
+    const merged = await applyOutreachDraft(db, queued.taskId)
+    if (!merged.merged) throw new Error(`merge failed: ${merged.reason} ${merged.detail}`)
+    const gated = await gateDraft(db, draft.id)
+    if (!gated.ok) throw new Error(`gate failed: ${gated.detail}`)
+
+    const current = await db.draft.findUniqueOrThrow({ where: { id: draft.id }, select: { composition: true } })
+    const composition = current.composition as DraftComposition
+    const legacy: DraftComposition = {
+      ...composition,
+      sentences: composition.sentences.map((s) => {
+        if (s.role !== 'signoff') return s
+        const name = s.text
+        return { ...s, templateId: 'signoff.plain@1', text: renderTemplate('signoff.plain@1', { ...vars, candidateName: name }) }
+      }),
+    }
+    await db.draft.update({ where: { id: draft.id }, data: { composition: legacy, bodyText: renderBody(legacy) } })
+
+    const approved = await approveDraft(db, draft.id, 'operator')
+    if (!approved.ok) throw new Error(`approve failed: ${approved.reason} ${approved.detail}`)
+    expect((await validateComposition(db, legacy, TEMPLATE_IDS)).ok).toBe(true)
+    expect(await verifyApprovalHash(db, draft.id)).toEqual({ matches: true })
   })
 })
 

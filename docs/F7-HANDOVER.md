@@ -107,6 +107,35 @@ first and reports `already_present` for the second); and the composer selects
 metadata key containing "token". The backfill's audit field is `verdict`, not
 `verdictToken`, for that reason; the first version recorded `[REDACTED]`.
 
+### 4.5 The message carries no opt-out line — `signoff.plain@2` *(departs from B4 and H6)*
+
+`docs/F6-DECISIONS.md` §3.2, an operator decision taken 2026-10-04. B4 lists "an easy way
+to decline" among its voluntarily adopted controls, and H6 swaps RFC 8058's header for "a
+plain human opt-out line". F4 built that line into `signoff.plain@1`: *"If you'd rather I
+didn't write again, say so and I won't."* The operator wants the mail to read as
+hand-written, and a decline line is what makes a one-off note read as a campaign.
+
+`signoff.plain@2` renders the operator's name and nothing else, and the composer uses it
+for every new draft. Nothing replaces the line, and there is still no `List-Unsubscribe`
+header (H6 is unchanged on that). What the decision rests on:
+
+- **The reply is the opt-out.** `classifyReply` reads "stop", "not interested", "remove
+  me" and the rest as `opt_out`, favouring recall over precision (F6-HANDOVER §4.6), and
+  an opt-out writes the HMAC suppression. Losing the prompt means a recipient's "no" now
+  arrives unprompted and in their own words, so that classifier carries more weight than
+  it did. Its patterns were already written for unprompted phrasings and did not change.
+- **One message per person** (§3.3 of the decisions file). Nothing automated follows, so
+  a recipient who ignores the mail never hears from the system again.
+
+**`signoff.plain@1` stays registered and its text must never change.** All four drafts
+in `outreach_dev` cite it. `validateComposition` refuses an unregistered `templateId`, so
+removing it would fail them at the Quality Gate and in `verify:f4`. The approval hash
+covers the stored sentence text and `templateId`, not a re-rendering, so it recomputes
+whatever the registry holds. A test pins both renderings and an approved `@1` draft
+verifying after `@2` landed. Those four drafts move to `@2` when step 3 re-composes them.
+
+Mutation-checked: renaming `@1` in the registry fails both `@1` tests.
+
 ---
 
 ## 10. Open questions — carried forward (F6 additions so far)
