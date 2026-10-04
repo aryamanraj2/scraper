@@ -554,6 +554,127 @@ have now died at that step.
   prose, India funding news. The extraction problem is the work, not the access.
 - **Product Hunt** — API path not disallowed, needs a token and a terms pass (§3.5).
 
+### 3.7 Firecrawl — tested 2026-10-04. Discovery yes, fetching no
+
+The operator asked why Firecrawl was not being used, given free credits and an MCP
+connection. Fair question; it had not been considered. It was tested properly and the
+answer splits in two.
+
+**As a fetcher inside the pipeline: NO. This was measured, not reasoned.**
+
+Firecrawl's docs state it reads `robots.txt` and applies the rules for `FirecrawlAgent`
+and for `*`, with no documented bypass. That is not what happens. Asked to scrape
+
+```
+https://itunes.apple.com/search?term=fitness&country=in&entity=software&limit=3
+```
+
+— a path `itunes.apple.com/robots.txt` explicitly closes with `Disallow: /search*`
+under `User-agent: *` (§3.4) — it returned `statusCode: 200` with full content,
+`proxyUsed: basic`, 1 credit. Robots enforcement appears to apply to multi-page
+`/crawl`, not to a single-page `/scrape` of a caller-supplied URL.
+
+**So routing pipeline fetches through Firecrawl turns every closed source in §3.4 back
+into an open one.** That is a robots override with extra steps, which non-negotiable #3
+forbids by name and `handover.md` §1.5 calls evasion. The gate's value is that it
+refuses; a fetcher that launders the refusal destroys it. Do not add
+`api.firecrawl.dev` as a fetch path for company or posting ingestion.
+
+**As a discovery tool in a chat: YES, under one rule.**
+
+> **Discovery is not evidence.**
+
+Firecrawl may be used by the operator or an assisting chat to find out *what exists* —
+candidate company names and domains. Those go into `data/company-seed.csv` and through
+`ingest:seed --from-file`, which already writes them as `sourceType: user_hint`,
+`fetchedVia: user_hint`, confidence **0.5**, explicitly not citable (F5a §6). The
+system's own gate then fetches each company's real site for anything that becomes an
+`Evidence` row. A hint is not a citation, nothing from Firecrawl is ever stored as a
+quotable fact, and every closed source stays closed because our gate still does the
+fetching.
+
+This is the same path the hand-built `mobile-targets.csv` used — the one that produced
+all 109 named contacts. Firecrawl makes that path faster. It does not change what the
+path is allowed to do.
+
+**What the search actually surfaced.** Alongside web results, `firecrawl_search`
+returns structured Alexandria providers. Two are directly relevant and answer the
+"unchecked domain lists" gap in §3.6:
+
+| provider / capability | what it returns |
+|---|---|
+| `builtin-com / jobs/search` | tech jobs by keyword → job URLs and company slugs |
+| `builtin-com / jobs/company` | **company website, headcount, industries** — a domain list, not YC |
+| `ycombinator-com / companies/search` | the YC directory with batch / region / hiring filters |
+| `ycombinator-com / companies/jobs` | per-company jobs with ISO country and a remote flag |
+
+`builtin-com` is the first concrete non-YC structured company source this project has
+found. Scope it as a domain list under the discovery rule above.
+
+**One provider that must never be called:** `fullenrich / contacts/mobile`, which
+resolves a person's mobile phone number from a LinkedIn URL. That is non-negotiable #1
+and #2 in a single call — LinkedIn-derived personal data about an individual. It is
+named here so nobody reaches for it on a thin day.
+
+### 3.8 A second goal: surfacing intern openings fast
+
+The operator proposed that **finding intern openings faster** become a second purpose of
+the project, not only contact harvesting. It is a good scope addition and it is far
+cheaper than it sounds, because the data is already being collected and thrown away at
+the presentation layer.
+
+What already exists, verified 2026-10-04:
+
+- `Opportunity` already carries `posted_at`, `last_seen_at`, `closed_at` and
+  `created_at`. All 5,084 rows have `posted_at` populated. Freshness and closure are
+  already modelled.
+- `INTERNSHIP_TERMS` already exists at `src/intel/scoring/collect.ts:83` — `intern`,
+  `internship`, `new grad`, `new-grad`, `graduate programme`, `graduate program`,
+  `apprentice`.
+- Posting bodies are stored and read (F5a, F5b).
+
+What is missing is only that the internship signal is used as a **company-level score
+component** (`internshipMentions` → `internship_feasibility`) and never as a
+**per-opportunity filter**. So:
+
+```
+opportunities                           5,084
+  intern/new-grad term in the TITLE        70
+  in the body                              45
+  OPEN, with the signal in either           85   <- already fetched, already parsed,
+                                                    surfaced nowhere
+```
+
+**85 live early-career openings are sitting in the database right now and nothing in
+the system shows them to the operator.** That is the cheapest unclaimed value in the
+project: a flag, a query and a dashboard queue over data already paid for.
+
+**And the speed problem is not a fetching problem.** "People reach openings faster with
+Firecrawl" is true for people who have no pipeline. This project has one — what it does
+not have is a **re-poll cadence**. Boards are read once, at detection. Nothing re-reads
+them, so a posting that appears tomorrow is invisible until something triggers a
+re-read. The fix is a scheduled refresh of the boards already detected (61 of them, on
+Greenhouse / Lever / Ashby APIs that are robots-allowed and already adapted), with
+`postingContentHash` doing the new-vs-unchanged work it already does. That is a cron
+and a query, not a new fetcher.
+
+Firecrawl helps with *discovering boards we do not have*. It does nothing for *freshness
+of boards we do*. Do not confuse the two.
+
+### 3.9 Geography: the operator has deprioritised India for outreach
+
+The operator's call, stated 2026-10-04: weight outreach towards non-Indian companies.
+Recorded as a decision rather than argued with — and the pipeline data independently
+points the same way, which is worth knowing when it is revisited:
+
+- 5 detectable boards from 71 Indian companies, against 54 from 117 elsewhere (F5a §6)
+- 24 of 57 Indian companies published no ATS vendor string at all (F5b §8)
+- **1 of the 55 new qualified leads from the F5c backfill is Indian** (§1.2)
+
+India has been the most expensive geography per usable lead at every stage measured. It
+remains the operator's own country and the weakest coverage, so `data.gov.in` (§3.6)
+stays on the list — but it is now a lower priority than it was, by decision and by data.
+
 ---
 
 ## 4. Non-negotiables. These are not suggestions
@@ -696,6 +817,13 @@ Measure a sample, then extrapolate.
 
 **Do not propose LinkedIn or X as a source, in any form.** They are where these
 companies are most visible and they are the two that are structurally closed (§2.1).
+This includes reaching them indirectly: `fullenrich / contacts/mobile` via Firecrawl
+resolves a phone number from a LinkedIn URL, and is forbidden (§3.7).
+
+**Do not route pipeline fetches through Firecrawl.** Measured 2026-10-04: it served a
+path `itunes.apple.com/robots.txt` disallows, despite docs claiming otherwise (§3.7).
+Using it as a fetcher reopens every closed source in §3.4 and makes the gate
+decorative. Discovery in a chat is fine; fetching is not. Discovery is not evidence.
 
 **Do not run `prisma db push`.** It reports the hand-written partial unique indexes on
 `send_attempt` as drift and offers to drop them. Use `prisma migrate`.
