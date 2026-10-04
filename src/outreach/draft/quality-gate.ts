@@ -37,7 +37,7 @@ import {
  * stored verdict readable a month later. Same rule as `ScoreVersion` — **a version is
  * never edited, only added.**
  */
-export const GATE_VERSION = 'f4-gate-v1'
+export const GATE_VERSION = 'f6-gate-v3'
 
 /**
  * §10.8 and `handover.md` §8: short enough for a recruiter to scan. The long sample
@@ -45,8 +45,15 @@ export const GATE_VERSION = 'f4-gate-v1'
  *
  * A ceiling rather than a target, and generous — the point is to catch a draft that
  * turned into a cover letter, not to police a good message by twenty characters.
+ *
+ * `f4-gate-v1` set 1,400. `f6-gate-v2` sets 1,800 (F6 step 3b): the operator reviewed
+ * the drafts at that length and found them "unnecessarily short and unnaturally
+ * direct", and the linked version runs about 1,500–1,700 characters. A cover letter is
+ * still well past this, and the test that pins that is unchanged. `f6-gate-v3` keeps the
+ * cap and changes what counts as the cited opener: any Evidence-cited sentence, since the
+ * company facts may now sit in the tldr or the closing tie.
  */
-export const MAX_BODY_CHARS = 1_400
+export const MAX_BODY_CHARS = 1_800
 export const MAX_SUBJECT_CHARS = 90
 
 /**
@@ -138,10 +145,11 @@ export function runQualityGate(input: GateInput, now: Date = new Date()): GateRe
   // 1. The edge the operator named. Not a re-check of validateComposition's schema
   // rule — that one refuses a company sentence with no citation. This one refuses a
   // MESSAGE with no company sentence at all, which parses fine and is template spray.
+  const evidenceSentences = input.composition.sentences.filter((s) => s.evidenceIds.length > 0)
   checks.push({
     id: 'has_cited_company_sentence',
-    passed: companySentences.length > 0 && companySentences.every((s) => s.evidenceIds.length > 0),
-    detail: `${companySentences.length} evidence-cited company sentence(s); §10.1's stated edge over template spray`,
+    passed: evidenceSentences.length > 0 && companySentences.every((s) => s.evidenceIds.length > 0),
+    detail: `${evidenceSentences.length} evidence-cited sentence(s); §10.1's stated edge over template spray`,
   })
 
   checks.push({
@@ -153,7 +161,7 @@ export function runQualityGate(input: GateInput, now: Date = new Date()): GateRe
   // 2. §8: "at least two specific, recent, non-marketing sources" for the personalized
   // opener. Counting DISTINCT evidence rows, because two sentences citing one row is
   // one source quoted twice.
-  const distinctEvidence = new Set(companySentences.flatMap((s) => s.evidenceIds))
+  const distinctEvidence = new Set(evidenceSentences.flatMap((s) => s.evidenceIds))
   checks.push({
     id: 'personalization_sources',
     // One is the floor the schema enforces; §8 wants two. A one-source opener is a

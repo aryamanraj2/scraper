@@ -3,14 +3,15 @@ import { closeTestDb, testDb, truncateAll } from '../helpers/db.js'
 import { seedApprovedClaims } from '../../src/apply/claims/seed-claims.js'
 import { seedCandidateProfile } from '../../src/apply/claims/seed-profile.js'
 import { composeDrafts, gateDraft } from '../../src/outreach/draft/compose.js'
-import { queueOutreachDraft, applyOutreachDraft } from '../../src/outreach/draft/queue-draft.js'
-import { approveDraft, verifyApprovalHash } from '../../src/outreach/draft/approve.js'
+import { queueOutreachDraft, applyOutreachDraft, latestFulfilledDraftTasks } from '../../src/outreach/draft/queue-draft.js'
+import { formatDraftForReview } from '../../src/outreach/draft/review.js'
+import { approveDraft, revokeApproval, verifyApprovalHash } from '../../src/outreach/draft/approve.js'
 import { validateComposition, renderBody, type DraftComposition } from '../../src/outreach/draft/message.js'
 import { renderTemplate, TEMPLATE_IDS } from '../../src/outreach/draft/templates.js'
 import { checkJurisdiction } from '../../src/outreach/draft/jurisdiction.js'
 import { runQualityGate } from '../../src/outreach/draft/quality-gate.js'
 import { selectContactSlots } from '../../src/outreach/draft/slots.js'
-import { fulfilTask } from '../../src/core/llm/handoff-gateway.js'
+import { fulfilTask, rejectTask } from '../../src/core/llm/handoff-gateway.js'
 import { resolveSendingEnabled } from '../../src/core/config/config.js'
 
 /**
@@ -154,19 +155,26 @@ async function world(opts: WorldOpts = {}) {
   return { db, company, lead, contact, evidence, resume, opportunity }
 }
 
-/** A fulfilled `outreach_draft` answer, so a draft can reach the gate. */
+/** A fulfilled `outreach_draft@2` answer, so a draft can reach the gate. */
 async function fulfilDraftTask(taskId: string, over: Record<string, unknown> = {}) {
   const db = testDb()
   const task = await db.llmTask.findUniqueOrThrow({ where: { id: taskId } })
   const evidenceId = task.allowedEvidenceIds[0]!
   const claimId = task.allowedApprovedClaimIds[0]!
   return fulfilTask(db, taskId, {
-    subject: 'Internship enquiry — Acme',
-    companySentence: {
-      text: 'I saw your platform team writes Go and runs Postgres at scale in Bengaluru.',
-      evidenceIds: [evidenceId],
-    },
-    candidateSentences: [{ text: 'I have built backend services in Go.', approvedClaimIds: [claimId] }],
+    subject: 'Student who wants to work on Postgres at Acme',
+    tldr: [
+      {
+        text: "Acme's platform team runs Postgres at scale in Bengaluru, and that is the kind of backend work I want to learn.",
+        evidenceIds: [evidenceId],
+        approvedClaimIds: [claimId],
+      },
+    ],
+    story: [
+      { text: 'I have built backend services in Go.', approvedClaimIds: [claimId] },
+      { text: 'I wrote their tests too.', approvedClaimIds: [claimId] },
+    ],
+    tie: { text: 'I saw your platform team writes Go and runs Postgres at scale in Bengaluru.', evidenceIds: [evidenceId] },
     ...over,
   })
 }
@@ -406,7 +414,7 @@ describe('the Quality Gate', () => {
       composition: base(),
       companyName: 'Acme',
     })
-    expect(result.version).toBe('f4-gate-v1')
+    expect(result.version).toBe('f6-gate-v3')
     expect(result.checks.length).toBeGreaterThan(5)
   })
 })
@@ -499,7 +507,7 @@ describe('approval_hash is frozen and compared byte-for-byte (A7)', () => {
     const swapped: DraftComposition = {
       ...composition,
       sentences: composition.sentences.map((s) =>
-        s.role === 'company' ? { ...s, evidenceIds: ['some-other-evidence-id'] } : s,
+        s.evidenceIds.length > 0 ? { ...s, evidenceIds: ['some-other-evidence-id'] } : s,
       ),
     }
     await db.draft.update({ where: { id: draftId }, data: { composition: swapped } })
@@ -523,7 +531,7 @@ describe('approval_hash is frozen and compared byte-for-byte (A7)', () => {
   it('freezes the draft: recomposition and merge both refuse it', async () => {
     const { db, draftId } = await approvedDraft()
     const before = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { bodyText: true } })
-    await composeDrafts(db)
+    await composeDrafts(db, { recompose: true })
     const after = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { bodyText: true } })
     expect(after.bodyText).toBe(before.bodyText)
   })
@@ -539,12 +547,12 @@ describe('the sign-off: @2 composes, @1 still resolves (F6-DECISIONS §3.2)', ()
     expect(renderTemplate('signoff.plain@2', vars)).toBe('Test Candidate')
   })
 
-  it('composes new drafts with @2, and no decline sentence reaches the body', async () => {
+  it('composes new drafts without the decline sentence (the newest sign-off, @5 since step 3b)', async () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { composition: true, bodyText: true } })
     const signoffs = (draft.composition as DraftComposition).sentences.filter((s) => s.role === 'signoff')
-    expect(signoffs.map((s) => s.templateId)).toEqual(['signoff.plain@2'])
+    expect(signoffs.map((s) => s.templateId)).toEqual(['signoff.plain@5'])
     expect(draft.bodyText).not.toMatch(/write again/i)
   })
 
@@ -578,6 +586,294 @@ describe('the sign-off: @2 composes, @1 still resolves (F6-DECISIONS §3.2)', ()
     if (!approved.ok) throw new Error(`approve failed: ${approved.reason} ${approved.detail}`)
     expect((await validateComposition(db, legacy, TEMPLATE_IDS)).ok).toBe(true)
     expect(await verifyApprovalHash(db, draft.id)).toEqual({ matches: true })
+  })
+})
+
+describe('revoking an approval, and re-composing (F6-DECISIONS §8, step 3)', () => {
+  async function approvedDraft() {
+    const w = await world()
+    await composeDrafts(w.db)
+    const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
+    const queued = await queueOutreachDraft(w.db, draft.id)
+    if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
+    await fulfilDraftTask(queued.taskId)
+    const merged = await applyOutreachDraft(w.db, queued.taskId)
+    if (!merged.merged) throw new Error(`merge failed: ${merged.reason} ${merged.detail}`)
+    const gated = await gateDraft(w.db, draft.id)
+    if (!gated.ok) throw new Error(`gate failed: ${gated.detail}`)
+    const approved = await approveDraft(w.db, draft.id, 'operator')
+    if (!approved.ok) throw new Error(`approve failed: ${approved.reason} ${approved.detail}`)
+    return { ...w, draftId: draft.id, hash: approved.approvalHash }
+  }
+
+  it('moves approved -> composing, clears the frozen fields, and audits the old hash', async () => {
+    const { db, draftId, hash } = await approvedDraft()
+    expect(await revokeApproval(db, draftId, 'operator')).toEqual({ ok: true, draftId, revokedHash: hash })
+
+    const after = await db.draft.findUniqueOrThrow({ where: { id: draftId } })
+    expect(after).toMatchObject({ status: 'composing', approvalHash: null, approvedAt: null, approvedBy: null, senderIdentity: null })
+    const audit = await db.auditLog.findFirstOrThrow({ where: { action: 'draft.approval_revoked', subjectId: draftId } })
+    expect(audit.actorId).toBe('operator')
+    expect((audit.metadata as { revokedHash: string }).revokedHash).toBe(hash)
+  })
+
+  it('never moves a draft forward: a revoked draft cannot be approved until it is gated again', async () => {
+    const { db, draftId } = await approvedDraft()
+    await revokeApproval(db, draftId, 'operator')
+    expect(await approveDraft(db, draftId, 'operator')).toMatchObject({ ok: false, reason: 'not_gated' })
+  })
+
+  it('refuses a draft that is not approved, and leaves it alone', async () => {
+    const { db } = await world()
+    await composeDrafts(db)
+    const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
+    expect(await revokeApproval(db, draft.id, 'operator')).toMatchObject({ ok: false, reason: 'not_approved' })
+    expect((await db.draft.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe('composing')
+  })
+
+  it('refuses once a send was attempted — the message may already be in an inbox', async () => {
+    const { db, draftId, company, contact } = await approvedDraft()
+    await db.sendAttempt.create({
+      data: {
+        draftId,
+        contactId: contact!.id,
+        companyId: company.id,
+        campaignCycle: '2026-09',
+        touchNumber: 1,
+        idempotencyKey: 'revoke-test-key',
+        rfc822MessageId: '<revoke@owned.example>',
+        status: 'in_flight',
+      },
+    })
+    expect(await revokeApproval(db, draftId, 'operator')).toMatchObject({ ok: false, reason: 'send_attempted' })
+    expect((await db.draft.findUniqueOrThrow({ where: { id: draftId } })).status).toBe('approved')
+  })
+
+  it('lets the composer re-compose a revoked draft, which an approved one never allows', async () => {
+    const { db, draftId } = await approvedDraft()
+    await revokeApproval(db, draftId, 'operator')
+    const out = await composeDrafts(db, { recompose: true })
+    expect(out.draftsUpdated).toBe(1)
+    const after = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { composition: true, status: true } })
+    expect(after.status).toBe('composing')
+    expect((after.composition as DraftComposition).sentences.some((s) => s.role === 'company')).toBe(false)
+  })
+
+  it('re-composing an awaiting_approval draft sends it back to composing, so it cannot be approved stripped', async () => {
+    // The hole this closes: a re-run replaced the cited company sentence with template
+    // text only and left the status at awaiting_approval, which approveDraft accepts.
+    const { db, draftId } = await approvedDraft()
+    await revokeApproval(db, draftId, 'operator')
+    await db.draft.update({ where: { id: draftId }, data: { status: 'awaiting_approval' } })
+    await composeDrafts(db, { recompose: true })
+    const after = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { status: true, gateResult: true, promptVersion: true } })
+    expect(after).toMatchObject({ status: 'composing', gateResult: null, promptVersion: null })
+    expect(await approveDraft(db, draftId, 'operator')).toMatchObject({ ok: false, reason: 'not_gated' })
+  })
+
+  it('a plain compose never touches an existing draft — rewriting needs recompose: true', async () => {
+    // The default that cost a review: plain drafts:run reset 34 written drafts.
+    const { db, draftId } = await approvedDraft()
+    await revokeApproval(db, draftId, 'operator')
+    await db.draft.update({ where: { id: draftId }, data: { status: 'awaiting_approval' } })
+    const before = await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { bodyText: true, status: true } })
+    const out = await composeDrafts(db)
+    expect(out.draftsUpdated).toBe(0)
+    expect(await db.draft.findUniqueOrThrow({ where: { id: draftId }, select: { bodyText: true, status: true } })).toEqual(before)
+  })
+
+  it('drafts from a company\'s LATEST lead only — a stale cycle never adds a second message', async () => {
+    // Measured 2026-10-04: 95 companies were qualified in both 2026-09 and 2026-10, and
+    // A2's indexes count per cycle, so a draft per lead was two touches to one person.
+    const { db, company, lead } = await world()
+    await composeDrafts(db)
+    const before = await db.draft.findFirstOrThrow({ select: { id: true, leadId: true } })
+    expect(before.leadId).toBe(lead.id)
+
+    const october = await db.lead.create({
+      data: {
+        companyId: company.id,
+        leadKind: 'posted_role',
+        status: 'qualified',
+        primaryTrack: 'sde',
+        primaryTrackReason: 'fixture',
+        campaignCycle: '2026-10',
+        score: 82,
+        opportunityId: (await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).opportunityId,
+      },
+      select: { id: true },
+    })
+    await composeDrafts(db, { recompose: true })
+    const drafts = await db.draft.findMany({ select: { id: true, leadId: true } })
+    // Re-homed onto the current lead, not duplicated beside it.
+    expect(drafts).toEqual([{ id: before.id, leadId: october.id }])
+  })
+
+  it('does not draft a company whose latest lead fell out of qualified', async () => {
+    // 4 companies qualified in 2026-09 re-scored to `qualifying` in 2026-10.
+    const { db, company } = await world()
+    await db.lead.create({
+      data: {
+        companyId: company.id,
+        leadKind: 'posted_role',
+        status: 'qualifying',
+        primaryTrack: 'sde',
+        primaryTrackReason: 'fixture',
+        campaignCycle: '2026-10',
+        score: 62,
+      },
+    })
+    const out = await composeDrafts(db)
+    expect(out.draftsCreated).toBe(0)
+    expect(await db.draft.count()).toBe(0)
+  })
+
+  it('drains only each draft\'s newest fulfilled task', async () => {
+    const { db } = await world()
+    await composeDrafts(db)
+    const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
+    const first = await queueOutreachDraft(db, draft.id)
+    if (!first.queued) throw new Error('queue failed')
+    await fulfilDraftTask(first.taskId)
+    const second = await queueOutreachDraft(db, draft.id)
+    if (!second.queued) throw new Error('queue failed')
+    expect(second.taskId).not.toBe(first.taskId)
+    await fulfilDraftTask(second.taskId)
+    expect(await latestFulfilledDraftTasks(db)).toEqual([{ id: second.taskId, subjectId: draft.id }])
+
+    // A newer task that was REJECTED supersedes too: drain must not fall back to the
+    // older answer the re-queue was meant to replace.
+    const third = await queueOutreachDraft(db, draft.id)
+    if (!third.queued) throw new Error('queue failed')
+    await rejectTask(db, third.taskId, 'weak_evidence')
+    expect(await latestFulfilledDraftTasks(db)).toEqual([])
+  })
+})
+
+describe('the approval view puts the recipient\'s title first (F6-DECISIONS §8, step 3)', () => {
+  const base = {
+    id: 'd1',
+    status: 'awaiting_approval',
+    companyName: 'Acme',
+    touchSlot: 0,
+    outreachCase: 'intern_availability_inquiry',
+    subject: 'Internship enquiry — Acme',
+    bodyText: 'Hello.',
+  }
+
+  it('leads with the title, before the address and the message', () => {
+    const view = formatDraftForReview({
+      ...base,
+      contact: { emailNormalized: 'person@acme.example', publicTitle: 'IT Asset Manager', contactType: 'named_employee', discoveryMethod: 'lookup_provider' },
+    })
+    const lines = view.split('\n').filter((l) => l.trim() && !l.startsWith('─'))
+    expect(lines[0]).toBe('TITLE    IT ASSET MANAGER')
+    expect(view.indexOf('IT ASSET MANAGER')).toBeLessThan(view.indexOf('person@acme.example'))
+  })
+
+  it('says a named contact\'s title is missing rather than leaving the line blank', () => {
+    const view = formatDraftForReview({
+      ...base,
+      contact: { emailNormalized: 'person@acme.example', publicTitle: null, contactType: 'named_employee', discoveryMethod: 'lookup_provider' },
+    })
+    expect(view).toContain('TITLE    (NO PUBLIC TITLE)')
+  })
+
+  it('never presents an alias\'s page text as a job title', () => {
+    // Measured on live rows: a page-published alias's publicTitle is the text the
+    // curator found beside the address, e.g. a JSON-LD fragment.
+    const view = formatDraftForReview({
+      ...base,
+      contact: { emailNormalized: 'careers@acme.example', publicTitle: '"email":"', contactType: 'careers_alias', discoveryMethod: 'page_published' },
+    })
+    expect(view).toContain('TITLE    (ROLE INBOX, NO PERSON: careers_alias)')
+    expect(view).toContain('page     text beside the address: ""email":""')
+    expect(view).not.toMatch(/TITLE\s+"EMAIL/)
+  })
+})
+
+describe('the F6 step 3b message, end to end', () => {
+  async function composed(named: boolean) {
+    const w = await world()
+    if (named) {
+      const c = await w.db.contact.update({
+        where: { id: w.contact!.id },
+        data: { emailNormalized: 'person@acme.example', contactType: 'named_talent', discoveryMethod: 'lookup_provider' },
+        select: { evidenceId: true },
+      })
+      await w.db.evidence.update({
+        where: { id: c.evidenceId },
+        data: {
+          sourceUrl: 'operator-entry://hunter/operator',
+          excerpt: 'acme.example,person@acme.example,Priya Example,Senior Recruiter,named_talent,hunter,,,valid',
+        },
+      })
+    }
+    await composeDrafts(w.db)
+    const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
+    const queued = await queueOutreachDraft(w.db, draft.id)
+    if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
+    await fulfilDraftTask(queued.taskId, { subject: 'A subject the session wrote' })
+    const merged = await applyOutreachDraft(w.db, queued.taskId)
+    if (!merged.merged) throw new Error(`merge failed: ${merged.reason} ${merged.detail}`)
+    const gated = await gateDraft(w.db, draft.id)
+    if (!gated.ok) throw new Error(`gate failed: ${gated.detail}`)
+    const row = await w.db.draft.findUniqueOrThrow({ where: { id: draft.id }, select: { subject: true, bodyText: true, composition: true } })
+    return { ...w, ...row, sentences: (row.composition as DraftComposition).sentences }
+  }
+
+  it('reads like the operator\'s samples: tldr, greeting, who I am, story, tie, ask, resume, thanks', async () => {
+    const { subject, bodyText } = await composed(false)
+    // The session's subject, written for this company, is the one used.
+    expect(subject).toBe('A subject the session wrote')
+    expect(bodyText!.split('\n\n')).toEqual([
+      "tldr; Acme's platform team runs Postgres at scale in Bengaluru, and that is the kind of backend work I want to learn.",
+      'Hi there,',
+      "I'm Aryaman, a third-year B.Tech student at NSUT Delhi, graduating 2028.",
+      'I have built backend services in Go. I wrote their tests too.',
+      'I saw your platform team writes Go and runs Postgres at scale in Bengaluru.',
+      "I'm free Dec 2026 to Jan 2027, or Jun to Aug 2027. Would you be open to a 15-minute call in the next couple of weeks? If this is the wrong inbox, a pointer to whoever handles intern hiring would mean a lot.",
+      'Resume: https://cv.example/backend.pdf',
+      'Thanks,\nAryaman\naryamanj.in · github.com/aryamanraj2',
+    ])
+  })
+
+  it('greets a named contact by the first name stored in their import line, and asks without the redirect', async () => {
+    const { bodyText } = await composed(true)
+    expect(bodyText).toContain('\n\nHi Priya,\n\n')
+    expect(bodyText).toContain('in the next couple of weeks?')
+    expect(bodyText).not.toContain('wrong inbox')
+  })
+
+  it('cites the claims behind the intro and the window, and every session line cites something', async () => {
+    const { db, sentences } = await composed(false)
+    const keys = async (ids: string[]) =>
+      (await db.approvedClaim.findMany({ where: { id: { in: ids } }, select: { key: true } })).map((c) => c.key).sort()
+    expect(await keys(sentences.find((s) => s.role === 'intro')!.approvedClaimIds)).toEqual(
+      ['education.degree', 'education.expected_graduation', 'education.year_of_study', 'identity.full_name'],
+    )
+    expect(await keys(sentences.find((s) => s.role === 'availability')!.approvedClaimIds)).toEqual(['eligibility.internship_window_short'])
+    for (const s of sentences.filter((s) => s.source === 'llm')) {
+      expect(s.evidenceIds.length + s.approvedClaimIds.length, s.text).toBeGreaterThan(0)
+    }
+  })
+
+  it('takes the subject, tldr, story and tie from the session, and nothing else', async () => {
+    const { sentences } = await composed(false)
+    expect(sentences.filter((s) => s.source === 'llm').map((s) => s.role)).toEqual(['opener', 'candidate', 'candidate', 'tie'])
+    expect(sentences.filter((s) => s.source === 'deterministic').map((s) => s.role)).toEqual(
+      ['greeting', 'intro', 'availability', 'ask', 'resume_link', 'signoff'],
+    )
+  })
+
+  it('never names the branch of study, or the old hardcoded guess at it', async () => {
+    // Read from the degree claim rather than written here: the operator does not want
+    // the branch named anywhere, and that includes this repository.
+    const { db, bodyText } = await composed(false)
+    const degree = await db.approvedClaim.findUniqueOrThrow({ where: { key: 'education.degree' } })
+    const branch = /Technology in (.+?) at /.exec(degree.text)![1]!
+    expect(bodyText!.toLowerCase()).not.toContain(branch.toLowerCase())
+    expect(bodyText).not.toMatch(/undergrad|second-year|\bCS\b/)
   })
 })
 
@@ -695,11 +991,13 @@ describe('the LLM boundary (docs/handoff-llm-gateway.md)', () => {
     if (!queued.queued) throw new Error(queued.reason)
 
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
+    const claim = task.allowedApprovedClaimIds[0]!
     const result = await fulfilTask(db, queued.taskId, {
-      subject: 'Internship enquiry — Acme',
-      companySentence: { text: 'Acme runs Postgres.', evidenceIds: ['forged-evidence-id'] },
-      candidateSentences: [
-        { text: 'I write Go.', approvedClaimIds: [task.allowedApprovedClaimIds[0]!] },
+      subject: 'Student who wants to work at Acme',
+      tldr: [{ text: 'Acme runs Postgres.', evidenceIds: ['forged-evidence-id'] }],
+      story: [
+        { text: 'I write Go.', approvedClaimIds: [claim] },
+        { text: 'I test it.', approvedClaimIds: [claim] },
       ],
     })
     expect(result.ok).toBe(false)
@@ -715,15 +1013,18 @@ describe('the LLM boundary (docs/handoff-llm-gateway.md)', () => {
 
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
     const result = await fulfilTask(db, queued.taskId, {
-      subject: 'Internship enquiry — Acme',
-      companySentence: { text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] },
-      candidateSentences: [{ text: 'I write Go.', approvedClaimIds: ['forged-claim-id'] }],
+      subject: 'Student who wants to work at Acme',
+      tldr: [{ text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] }],
+      story: [
+        { text: 'I write Go.', approvedClaimIds: ['forged-claim-id'] },
+        { text: 'I test it.', approvedClaimIds: ['forged-claim-id'] },
+      ],
     })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.problem).toBe('uncited_claim')
   })
 
-  it('refuses an answer whose company sentence cites nothing — a SCHEMA error', async () => {
+  it('refuses an answer that cites no Evidence anywhere, or a tldr line citing nothing — SCHEMA errors', async () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
@@ -731,14 +1032,24 @@ describe('the LLM boundary (docs/handoff-llm-gateway.md)', () => {
     if (!queued.queued) throw new Error(queued.reason)
 
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
-    const result = await fulfilTask(db, queued.taskId, {
-      subject: 'Internship enquiry — Acme',
-      companySentence: { text: 'Acme runs Postgres.', evidenceIds: [] },
-      candidateSentences: [
-        { text: 'I write Go.', approvedClaimIds: [task.allowedApprovedClaimIds[0]!] },
-      ],
+    const claim = task.allowedApprovedClaimIds[0]!
+    const story = [
+      { text: 'I write Go.', approvedClaimIds: [claim] },
+      { text: 'I test it.', approvedClaimIds: [claim] },
+    ]
+    const noEvidence = await fulfilTask(db, queued.taskId, {
+      subject: 'Student who wants to work at Acme',
+      tldr: [{ text: 'I like backends.', approvedClaimIds: [claim] }],
+      story,
     })
-    expect(result.ok).toBe(false)
+    expect(noEvidence).toMatchObject({ ok: false, problem: 'schema_mismatch' })
+    const uncitedLine = await fulfilTask(db, queued.taskId, {
+      subject: 'Student who wants to work at Acme',
+      tldr: [{ text: 'Acme is great.' }],
+      story,
+      tie: { text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] },
+    })
+    expect(uncitedLine).toMatchObject({ ok: false, problem: 'schema_mismatch' })
   })
 
   it('never puts the recipient address in the task payload', async () => {

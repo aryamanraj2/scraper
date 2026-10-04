@@ -1,3 +1,4 @@
+import { Prisma } from '../../../generated/prisma/client.js'
 import type { OutreachCase } from '../../../generated/prisma/enums.js'
 import type { Db } from '../../core/audit/audit-log.js'
 import { writeAudit } from '../../core/audit/audit-log.js'
@@ -17,6 +18,8 @@ import {
 import { selectContactSlots } from './slots.js'
 import { renderTemplate, TEMPLATE_IDS, type TemplateVars } from './templates.js'
 import { GATE_VERSION, runQualityGate } from './quality-gate.js'
+import { INTRO, type PitchSentence } from './pitch.js'
+import { recipientFirstName } from './greeting.js'
 import { partitionEvidenceByScope } from './evidence-scope.js'
 
 /**
@@ -61,11 +64,23 @@ export type ComposeOptions = {
   limit?: number
   /** The operator's own identity, for the sign-off and A7's `sender_identity`. */
   senderIdentity?: string | null
+  /**
+   * Rewrite drafts that already exist. Off by default: re-composing resets a draft to
+   * template sentences and drops the session-written text until the next drain. F6 step
+   * 3b measured what the default cost: a plain `drafts:run` silently took 34 written,
+   * gated drafts back to `composing` minutes before the operator's review.
+   */
+  recompose?: boolean
 }
+
+/** Statuses a composer may overwrite. Everything later is an approval or a record of a send. */
+const RECOMPOSABLE = new Set(['composing', 'quality_gate', 'gate_failed', 'awaiting_approval'])
 
 /** The claim keys the deterministic sentences draw on. */
 const AVAILABILITY_CLAIM_KEY = 'eligibility.internship_window'
 const NAME_CLAIM_KEY = 'identity.full_name'
+const SHORT_WINDOW_CLAIM_KEY = 'eligibility.internship_window_short'
+const LINK_CLAIM_KEYS = ['identity.portfolio', 'identity.github']
 
 export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<ComposeOutcome> {
   const now = opts.now ?? new Date()
@@ -97,7 +112,7 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
           teamSize: true,
           contacts: {
             where: { status: 'active' },
-            select: { id: true, contactType: true, verified: true, emailNormalized: true, discoveryMethod: true },
+            select: { id: true, contactType: true, verified: true, emailNormalized: true, discoveryMethod: true, evidenceId: true },
           },
         },
       },
@@ -105,6 +120,24 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
     orderBy: { score: 'desc' },
     ...(opts.limit === undefined ? {} : { take: opts.limit }),
   })
+
+  // A company's LATEST lead speaks for it, whatever that lead's status. F2 §4.15 keeps
+  // one lead per company per cycle, not one per company, so re-scoring in a new month
+  // leaves last month's `qualified` row standing beside this month's. Measured
+  // 2026-10-04: 95 companies were qualified in both 2026-09 and 2026-10, and A2's
+  // indexes count per cycle, so a draft under each lead would have been two first
+  // touches to one human, both legal to the database (F6-DECISIONS §3.3 says one).
+  // And 4 companies qualified in 2026-09 re-scored to `qualifying` in 2026-10: the
+  // current score says research-needed, and a stale row must not overrule it.
+  const latestCycle = new Map(
+    (
+      await db.lead.groupBy({
+        by: ['companyId'],
+        where: { companyId: { in: [...new Set(leads.map((l) => l.company.id))] } },
+        _max: { campaignCycle: true },
+      })
+    ).map((g) => [g.companyId, g._max.campaignCycle]),
+  )
 
   const resumesByTrack = await loadTrackResumes(db)
   const claims = await db.approvedClaim.findMany({
@@ -115,6 +148,7 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
 
   for (const lead of leads) {
     const company = lead.company
+    if (lead.campaignCycle !== latestCycle.get(company.id)) continue
 
     // §10.7: one slot, or two for a company big enough that a second route reaches a
     // genuinely different human.
@@ -195,65 +229,76 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
         select: { linkUrl: true },
       })
 
+      const contactEvidence = await db.evidence.findUnique({
+        where: { id: contact.evidenceId },
+        select: { excerpt: true, sourceUrl: true },
+      })
+      const fullName = claimByKey.get(NAME_CLAIM_KEY)?.text ?? 'the candidate'
       const vars: TemplateVars = {
         companyName: company.displayName,
         roleTitle: lead.opportunity?.title ?? null,
         resumeUrl: resumeRow?.linkUrl ?? '',
-        candidateName: claimByKey.get(NAME_CLAIM_KEY)?.text ?? 'the candidate',
+        candidateName: fullName,
+        candidateFirstName: fullName.split(/\s+/)[0] ?? fullName,
+        candidateLinks:
+          LINK_CLAIM_KEYS.map((k) => claimByKey.get(k)?.text.replace(/^https?:\/\//, ''))
+            .filter((t): t is string => Boolean(t))
+            .join(' · ') || null,
+        recipientFirstName: recipientFirstName({ ...contact, evidence: contactEvidence }),
       }
 
-      const composition = deterministicComposition(decision.outreachCase, vars, claimByKey, now)
+      const composition = deterministicComposition({
+        vars,
+        claimByKey,
+        roleInbox: !contact.contactType.startsWith('named'),
+        now,
+      })
 
-      const existing = await db.draft.findUnique({
-        where: {
-          leadId_contactId_touchSlot: {
-            leadId: lead.id,
-            contactId: contact.id,
-            touchSlot: slot.touchSlot,
-          },
-        },
-        select: { id: true, approvedAt: true },
+      // This person's existing draft at this company, under ANY lead. Matching on the
+      // current lead alone would leave a draft composed under last cycle's lead beside a
+      // new one to the same human; re-composing re-homes it onto the current lead
+      // instead, so one person has one draft.
+      const existing = await db.draft.findFirst({
+        where: { contactId: contact.id, lead: { companyId: company.id } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, approvedAt: true, status: true },
       })
 
       // An approved draft is frozen, exactly as an accepted packet is (F3 §4.11).
       // `approval_hash` is a claim about what a human read; regenerating underneath it
-      // would make that claim false while leaving the hash in place.
-      if (existing?.approvedAt) continue
+      // would make that claim false while leaving the hash in place. Anything past
+      // approval (scheduled, sent, an outcome) is history and is never rewritten.
+      if (existing?.approvedAt || (existing && !RECOMPOSABLE.has(existing.status))) continue
+      if (existing && !opts.recompose) continue
 
-      const draft = await db.draft.upsert({
-        where: {
-          leadId_contactId_touchSlot: {
-            leadId: lead.id,
-            contactId: contact.id,
-            touchSlot: slot.touchSlot,
-          },
-        },
-        create: {
-          leadId: lead.id,
-          contactId: contact.id,
-          touchSlot: slot.touchSlot,
-          resumeVersionId: resume.id,
-          status: 'composing',
-          outreachCase: decision.outreachCase,
-          subject: composition.subject,
-          bodyText: renderBody(composition),
-          composition,
-          citedEvidenceIds: compositionEvidenceIds(composition),
-          approvedClaimIds: compositionClaimIds(composition),
-        },
-        update: {
-          resumeVersionId: resume.id,
-          outreachCase: decision.outreachCase,
-          subject: composition.subject,
-          bodyText: renderBody(composition),
-          composition,
-          citedEvidenceIds: compositionEvidenceIds(composition),
-          approvedClaimIds: compositionClaimIds(composition),
-        },
-        select: { id: true, createdAt: true, updatedAt: true },
-      })
+      const content = {
+        leadId: lead.id,
+        touchSlot: slot.touchSlot,
+        resumeVersionId: resume.id,
+        outreachCase: decision.outreachCase,
+        subject: composition.subject,
+        bodyText: renderBody(composition),
+        composition,
+        citedEvidenceIds: compositionEvidenceIds(composition),
+        approvedClaimIds: compositionClaimIds(composition),
+      }
 
-      const created = draft.createdAt.getTime() === draft.updatedAt.getTime()
+      // A re-composed draft holds template sentences only, so it goes back to
+      // `composing` with its old verdict and prompt version cleared. Leaving the status
+      // alone let a draft that had reached `awaiting_approval` be approved after a
+      // re-run had stripped its cited company sentence.
+      const draft = existing
+        ? await db.draft.update({
+            where: { id: existing.id },
+            data: { ...content, status: 'composing', statusReason: null, gateResult: Prisma.DbNull, promptVersion: null },
+            select: { id: true },
+          })
+        : await db.draft.create({
+            data: { ...content, contactId: contact.id, status: 'composing' },
+            select: { id: true },
+          })
+
+      const created = !existing
       if (created) out.draftsCreated += 1
       else out.draftsUpdated += 1
 
@@ -343,52 +388,68 @@ export function factsFor(
  * rule, which is what makes "every candidate sentence traces to an approved claim"
  * checkable by containment rather than by reading for smuggled facts.
  */
-export function deterministicComposition(
-  outreachCase: OutreachCase,
-  vars: TemplateVars,
-  claimByKey: Map<string, { id: string; key: string; text: string }>,
-  now: Date,
-): DraftComposition {
+export function deterministicComposition(input: {
+  vars: TemplateVars
+  claimByKey: Map<string, { id: string; key: string; text: string }>
+  /** A role inbox gets "Hi there," and the ask that also invites a redirect. */
+  roleInbox: boolean
+  now: Date
+}): DraftComposition {
+  const { vars, claimByKey } = input
   const sentences: DraftSentence[] = []
 
-  const tldrId =
-    outreachCase === 'post_application_followup'
-      ? 'tldr.post_application@1'
-      : outreachCase === 'application_route_unclear'
-        ? 'tldr.posted_role@1'
-        : 'tldr.intern_inquiry@1'
-  sentences.push(template(tldrId, 'tldr', vars))
+  // F6 step 3b, fourth pass: the operator's sample drafts. These are the parts that are
+  // the same for every company. The session writes the subject, tldr, story and tie
+  // (`outreach_draft@2`), and the merge places them around these.
+  sentences.push(template(vars.recipientFirstName ? 'greeting.named@1' : 'greeting.inbox@1', 'greeting', vars))
 
-  // The company and candidate sentences are the LLM's; they are merged in later.
+  const intro = citedSentence(INTRO, claimByKey)
+  if (intro) sentences.push({ ...intro, role: 'intro' })
 
-  const availability = claimByKey.get(AVAILABILITY_CLAIM_KEY)
-  if (availability) {
+  // The operator's short form, quoted verbatim; the long claim is the fallback.
+  const short = claimByKey.get(SHORT_WINDOW_CLAIM_KEY)
+  const long = claimByKey.get(AVAILABILITY_CLAIM_KEY)
+  const window = short ?? long
+  if (window) {
     sentences.push({
       role: 'availability',
-      text: availability.text,
+      text: short ? short.text : `I'm ${window.text.charAt(0).toLowerCase()}${window.text.slice(1)}`,
       evidenceIds: [],
-      approvedClaimIds: [availability.id],
+      approvedClaimIds: [window.id],
       templateId: null,
       source: 'deterministic',
     })
   }
 
+  sentences.push(template(input.roleInbox ? 'ask.call_or_route@3' : 'ask.call@3', 'ask', vars))
   if (vars.resumeUrl) sentences.push(template('resume.link@1', 'resume_link', vars))
-
-  const askId =
-    outreachCase === 'post_application_followup'
-      ? 'ask.post_application@1'
-      : outreachCase === 'application_route_unclear'
-        ? 'ask.route_unclear@1'
-        : 'ask.intern_availability@1'
-  sentences.push(template(askId, 'ask', vars))
-  sentences.push(template('signoff.plain@2', 'signoff', vars))
+  sentences.push(template('signoff.plain@5', 'signoff', vars))
 
   return {
-    subject: `Internship enquiry — ${vars.companyName}`,
+    subject: `Engineering internship at ${vars.companyName}`,
     sentences,
     promptVersion: null,
-    composedAt: now.toISOString(),
+    composedAt: input.now.toISOString(),
+  }
+}
+
+/**
+ * A fixed candidate sentence, citing the claims it is bounded by. Dropped — never sent
+ * uncited — when any of those claims is missing or withdrawn.
+ */
+function citedSentence(
+  p: PitchSentence,
+  claimByKey: Map<string, { id: string; key: string; text: string }>,
+): DraftSentence | null {
+  const ids = p.claimKeys.map((k) => claimByKey.get(k)?.id)
+  if (ids.some((id) => id === undefined)) return null
+  return {
+    role: 'candidate',
+    text: p.text,
+    evidenceIds: [],
+    approvedClaimIds: ids as string[],
+    templateId: null,
+    source: 'deterministic',
   }
 }
 

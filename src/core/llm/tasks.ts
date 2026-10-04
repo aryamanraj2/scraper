@@ -137,6 +137,39 @@ const OutreachDraftResponse = z.object({
 
 export type OutreachDraftResponse = z.infer<typeof OutreachDraftResponse>
 
+/**
+ * `outreach_draft@2` — F6 step 3b, fourth pass. The operator's sample drafts read well
+ * because every company-facing part is written for that company: the subject, the
+ * tldr, which projects are told and in what order, and the closing tie. So the session
+ * writes all four, and every sentence still cites what it rests on (§10.1).
+ *
+ * A tldr sentence may assert something about the candidate, the company, or both, so it
+ * must cite at least one of either; story sentences are about the candidate and must
+ * cite claims; the tie is about the company and must cite evidence. And the message as
+ * a whole must cite at least one Evidence row, or it is template spray.
+ */
+const CitedLine = z.object({
+  text: z.string().min(1).max(400),
+  evidenceIds: z.array(z.string().min(1)).default([]),
+  approvedClaimIds: z.array(z.string().min(1)).default([]),
+})
+const OutreachDraftResponseV2 = z
+  .object({
+    subject: z.string().min(1).max(90),
+    tldr: z
+      .array(CitedLine.refine((l) => l.evidenceIds.length + l.approvedClaimIds.length > 0, 'a tldr sentence cites nothing'))
+      .min(1)
+      .max(3),
+    story: z.array(CitedLine.extend({ approvedClaimIds: z.array(z.string().min(1)).min(1) })).min(2).max(6),
+    tie: CitedLine.extend({ evidenceIds: z.array(z.string().min(1)).min(1) }).nullable().default(null),
+  })
+  .refine(
+    (r) => [...r.tldr, ...r.story, ...(r.tie ? [r.tie] : [])].some((l) => l.evidenceIds.length > 0),
+    'the message cites no Evidence; without a company citation it is template spray',
+  )
+
+export type OutreachDraftResponseV2 = z.infer<typeof OutreachDraftResponseV2>
+
 export const LLM_TASK_KINDS = {
   researchBrief: 'research_brief',
   packetAnswers: 'packet_answers',
@@ -173,6 +206,13 @@ export const LLM_TASK_SCHEMAS: LlmTaskSchemaEntry[] = [
     schema: OutreachDraftResponse,
     description:
       'A short outreach message: a subject line, one Evidence-cited sentence about the company, and one or two ApprovedClaim-cited sentences about the candidate. Every citation must come from the task\'s allow-sets.',
+  },
+  {
+    kind: LLM_TASK_KINDS.outreachDraft,
+    promptVersion: 'outreach_draft@2',
+    schema: OutreachDraftResponseV2,
+    description:
+      'The company-specific parts of an outreach message: subject, a 1-3 sentence tldr, a 2-6 sentence story of the most relevant projects, and an optional closing tie. Every sentence cites claims and/or evidence from the allow-sets.',
   },
 ]
 

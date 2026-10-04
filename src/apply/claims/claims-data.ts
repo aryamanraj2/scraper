@@ -58,6 +58,9 @@ export const CLAIM_CATEGORIES = [
   'project',
   'skill',
   'eligibility',
+  // F6 step 3b: how the operator describes their own work, in their own words. Not a
+  // credential, so not offered to the LLM's candidate sentences; the composer quotes it.
+  'voice',
 ] as const
 
 export type ClaimCategory = (typeof CLAIM_CATEGORIES)[number]
@@ -67,6 +70,12 @@ const IOS = 'resumes/Resume_IOS.tex'
 const ANDROID = 'resumes/Resume_android.tex'
 const BACKEND = 'resumes/Resume_backend.tex'
 const OPERATOR = 'operator'
+// F6 step 3b: the operator's project and experience dossier, compiled 2026-10-04 from the
+// repos, every resume version and public pages, separating what each source verifies.
+// Where it corrects a resume line, the dossier wins and the claim says so.
+const DOSSIER = 'operator: dossier 2026-10-04'
+// The operator's corrections to the dossier itself, same day. Where they disagree, these win.
+const OPERATOR_CONFIRMED = 'operator: confirmed 2026-10-04'
 
 export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   // --- identity ------------------------------------------------------------
@@ -121,8 +130,8 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   {
     key: 'experience.airtel.text_to_sql',
     category: 'experience',
-    sourceRef: MAIN,
-    text: 'Designed a guardrailed natural-language interface over a production VM database using local Ollama LLMs with LangChain, NeMo Guardrails input/output rails, and a read-only text-to-SQL agent, so no agent path can mutate or exfiltrate fleet state.',
+    sourceRef: OPERATOR_CONFIRMED,
+    text: "Designed a guardrailed natural-language interface over a production VM database: a LangChain-orchestrated, read-only text-to-SQL agent with NeMo Guardrails input/output rails, served over a REST API on self-hosted Ollama LLMs, so no agent path can mutate or exfiltrate fleet state.",
   },
   {
     key: 'experience.airtel.surge_analysis',
@@ -133,14 +142,14 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   {
     key: 'experience.smartout.role',
     category: 'experience',
-    sourceRef: IOS,
-    text: 'iOS Developer (Contract) at SmartOut Media (Canada), working remotely (Jan. 2026 - Present).',
+    sourceRef: DOSSIER,
+    text: "Software Engineer (Contract) at SmartOut Media (Canada), working remotely (Jan. 2026 - Present).",
   },
   {
     key: 'experience.smartout.app',
     category: 'experience',
-    sourceRef: IOS,
-    text: 'Built the SmartOut iOS app from the ground up in Swift and SwiftUI (50K+ installs) - an offline-first geospatial platform for Ontario hunting and fishing regulations - over a bundled SQLite dataset and a migratable GRDB store, instrumented with GA4 analytics and Crashlytics.',
+    sourceRef: OPERATOR_CONFIRMED,
+    text: "Rebuilt the SmartOut iOS app from scratch in native Swift and SwiftUI, replacing an earlier, minimal Flutter build, added features including sign-up and outfitters, and republished it: an offline-first geospatial app for Ontario hunting and fishing regulations, over a bundled SQLite dataset and a GRDB store with versioned migrations, instrumented with GA4 analytics and Crashlytics.",
   },
   {
     key: 'experience.smartout.maps',
@@ -177,8 +186,8 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   {
     key: 'achievement.swift_student_challenge',
     category: 'achievement',
-    sourceRef: MAIN,
-    text: 'Apple Swift Student Challenge Winner (2026), selected among the top global student developers for Saldo, an on-device personal finance iOS app that runs receipt parsing and spend intelligence entirely offline.',
+    sourceRef: DOSSIER,
+    text: "Apple Swift Student Challenge Winner (2026), selected among the top global student developers for Saldo's iOS app, an on-device personal finance app that does receipt scanning and spend insights entirely offline.",
   },
   {
     key: 'achievement.mlh_brainwave',
@@ -197,8 +206,8 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   {
     key: 'project.saldo.ios',
     category: 'project',
-    sourceRef: IOS,
-    text: 'Saldo is an on-device personal finance iOS app built with no third-party dependencies (SwiftUI, Vision, VisionKit, Foundation Models): VisionKit OCR receipt scanning and Vision subject masking feed a versioned image pipeline with automatic migration, and OCR and inference run actor-isolated off the UI thread with zero cloud dependency.',
+    sourceRef: OPERATOR_CONFIRMED,
+    text: "Saldo started as an iOS-only app and won Apple's Swift Student Challenge 2026. It scans a receipt and extracts the amount completely offline with VisionKit OCR and a Core ML model he trained himself (the challenge allows only Apple frameworks), adds insights with Apple Foundation Models, and uses Vision subject masking for savings goals, with zero cloud dependency and no third-party dependencies.",
   },
   {
     key: 'project.saldo.android',
@@ -209,8 +218,8 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
   {
     key: 'project.saldo.sms_parser',
     category: 'project',
-    sourceRef: ANDROID,
-    text: 'Rebuilt an unstructured bank-SMS transaction parser as a staged rule engine over 9 Indian bank/UPI templates, fixing 13 correctness defects including quoted account balances misattributed as transaction amounts and Rs. 0 rows that corrupted every dashboard aggregate.',
+    sourceRef: DOSSIER,
+    text: "Rebuilt the bank-SMS transaction parser in Saldo's Android app as a staged rule engine over 9 Indian bank/UPI templates, fixing 13 correctness defects including quoted account balances misattributed as transaction amounts and Rs. 0 rows that corrupted every dashboard aggregate.",
   },
   {
     key: 'project.saldo.golden_corpus',
@@ -237,16 +246,10 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
     text: 'Engineered an actor-isolated seven-stage planning pipeline (extract, normalize, research, resolve, curate, validate, schedule) in Wandr where Foundation Models return array indices only into a pre-vetted deck - never names, prices, or hours - under @Generable/@Guide constrained decoding with a 12s TaskGroup timeout, and deterministic validation alone may mint a plan.',
   },
   {
-    key: 'project.wandr.generation_split',
-    category: 'project',
-    sourceRef: IOS,
-    text: 'Splitting one 13-field model generation into three raised correctness from roughly 12% to roughly 72% in Wandr.',
-  },
-  {
     key: 'project.wandr.tests',
     category: 'project',
-    sourceRef: IOS,
-    text: 'Covered Wandr with 340 Swift Testing cases.',
+    sourceRef: DOSSIER,
+    text: "Covered Wandr with 369 Swift Testing tests, including a golden evaluation that scores 15 realistic host phrasings as a set.",
   },
   {
     key: 'project.wandr.network_framework',
@@ -261,34 +264,16 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
     text: 'Designed Wandr’s relay to hold no authority: it rebroadcasts a versioned snapshot and every device folds it through the same pure tally (plurality, quorum gate, deterministic ties), so all clients converge on the identical decided schedule without exchanging a winner.',
   },
   {
-    key: 'project.wandr.realtime_lobby',
-    category: 'project',
-    sourceRef: BACKEND,
-    text: 'Built a real-time multiplayer lobby on Cloudflare Durable Objects and Supabase Realtime: join-code/QR sessions, WebSocket presence and broadcast tallies at sub-second consistency, quorum locking under host authority, and pseudonymous device-scoped IDs needing no guest accounts.',
-  },
-  {
     key: 'project.wandr.constraint_ladder',
     category: 'project',
     sourceRef: BACKEND,
     text: 'Designed a constraint-ladder resolver that relaxes the least critical rule first (setting, budget, time, stops) while never relaxing dietary or accessibility constraints, so planning cannot dead-end.',
   },
   {
-    key: 'project.wandr.hybrid_retrieval',
-    category: 'project',
-    sourceRef: MAIN,
-    text: 'Built hybrid retrieval over the live Google Places and Routes APIs behind a swappable VenueResearching protocol.',
-  },
-  {
     key: 'project.aquasense.grounding',
     category: 'project',
-    sourceRef: MAIN,
-    text: 'Engineered a hybrid Random Forest and Gemini pipeline in AquaSense that grounds every LLM claim in classifier output, eliminating hallucinated water-toxicity verdicts, served from a stateless Flask REST API to native SwiftUI and Kotlin clients.',
-  },
-  {
-    key: 'project.aquasense.multi_agent',
-    category: 'project',
-    sourceRef: MAIN,
-    text: 'Built a multi-agent LangChain layer of three routable specialists in AquaSense: a health agent over live telemetry, a disease agent running computer-vision diagnosis on fish images, and a marketplace agent turning any flagged condition into a curated in-app cart.',
+    sourceRef: DOSSIER,
+    text: "Engineered a hybrid Random Forest and Gemini pipeline in AquaSense that grounds every LLM claim in classifier output, eliminating hallucinated water-toxicity verdicts; the hackathon build served it from a Flask API, and the current system runs on a FastAPI backend, to native SwiftUI and Kotlin clients.",
   },
   {
     key: 'project.aquasense.android',
@@ -392,6 +377,168 @@ export const APPROVED_CLAIMS: ApprovedClaimSeed[] = [
     // "flexible": an application form asking when you can start deserves the actual
     // dates, and "flexible" is a claim about availability the operator did not make.
     text: 'Available for an internship from December 2026 through January 2027, or from June 2027 through August 2027.',
+  },
+  {
+    key: 'voice.hook',
+    category: 'voice',
+    // The opening line of the operator's own cover letter. A claim rather than template
+    // text because it is a statement about the candidate, and every such statement
+    // traces to something the operator wrote (F3 §4.1). The TL;DR quotes it.
+    sourceRef: 'operator: cover letter',
+    text: 'Most of what I build starts as a complaint in a group chat.',
+  },
+  {
+    key: 'voice.ai_rule',
+    category: 'voice',
+    // The rule the operator's cover letter says runs through their AI projects. The AI
+    // story sentences lead with it, so it is a claim they cite rather than template text.
+    sourceRef: 'operator: cover letter',
+    text: "Let the AI handle the messy part, but don't let it make things up.",
+  },
+  // F6 step 3b, fourth pass. The operator supplied three sample drafts on 2026-10-04 and
+  // confirmed the details below as true. Each is recorded so a session can cite it
+  // rather than invent something like it for another company.
+  {
+    key: 'education.year_of_study',
+    category: 'education',
+    sourceRef: OPERATOR,
+    text: 'Third-year B.Tech student at Netaji Subhas University of Technology in the 2026-27 academic year.',
+  },
+  {
+    key: 'eligibility.internship_window_short',
+    category: 'eligibility',
+    // The same two windows as eligibility.internship_window, in the operator's own
+    // short form from the sample drafts. The message quotes it verbatim.
+    sourceRef: 'operator: sample drafts',
+    text: "I'm free Dec 2026 to Jan 2027, or Jun to Aug 2027.",
+  },
+  {
+    key: 'experience.airtel.latency_effort',
+    category: 'experience',
+    sourceRef: OPERATOR,
+    text: 'Spent weeks on database indexes and pagination at Bharti Airtel to cut dashboard query latency by 30%, and that work was the best part of the internship.',
+  },
+  {
+    key: 'experience.smartout.no_signal',
+    category: 'experience',
+    sourceRef: OPERATOR,
+    text: "SmartOut keeps Ontario's hunting and fishing rules available offline for people with no signal.",
+  },
+  {
+    key: 'voice.on_device',
+    category: 'voice',
+    sourceRef: OPERATOR,
+    text: "I build iOS apps that keep the user's data on their phone.",
+  },
+  {
+    key: 'voice.annoyed',
+    category: 'voice',
+    sourceRef: 'operator: sample drafts',
+    text: 'I build things because something annoyed me.',
+  },
+  {
+    key: 'voice.model_serving',
+    category: 'voice',
+    sourceRef: 'operator: sample drafts',
+    text: 'The deeper I go, the more I think how a model is served matters as much as which model it is.',
+  },
+  {
+    key: 'voice.llm_trust',
+    category: 'voice',
+    sourceRef: 'operator: sample drafts',
+    text: "I didn't trust an LLM to guess at fish disease, so in AquaSense a classifier makes the call and Gemini only explains it.",
+  },
+  {
+    key: 'voice.databases',
+    category: 'voice',
+    sourceRef: 'operator: sample drafts',
+    text: 'I like databases more than most people my age probably should.',
+  },
+  {
+    key: 'voice.bank_sms',
+    category: 'voice',
+    sourceRef: DOSSIER,
+    text: "My bank SMS felt like nobody's business, so Saldo's Android app parses it on the phone with a rule engine, and only redacted, low-confidence messages ever reach a cloud model.",
+  },
+  // From the dossier, as the operator corrected it. Withdrawn: Wandr's 12% -> 72% figure
+  // (not found) and the Cloudflare/Supabase lobby (a teammate's first backend, replaced in
+  // the operator's version; credited below). seedApprovedClaims deactivates them, never
+  // deletes them. The operator confirmed the AquaSense LangChain layer and the Google
+  // Places retrieval as his own, so both stay.
+  {
+    key: 'project.wandr.hybrid_retrieval',
+    category: 'project',
+    // Withdrawn on the dossier's reading, restored on the operator's word: his own work.
+    sourceRef: OPERATOR_CONFIRMED,
+    text: 'Built hybrid retrieval over the live Google Places and Routes APIs behind a swappable VenueResearching protocol.',
+  },
+  {
+    key: 'project.wandr.siri_intent',
+    category: 'project',
+    // Confirmed by the operator on 2026-10-04 as built and built entirely by him (not
+    // part of the team hackathon origin). Backs the both_wandr module in F6-EMAIL-SPEC.
+    sourceRef: OPERATOR_CONFIRMED,
+    text: 'Built Wandr\'s Siri flow on iOS 27, entirely by himself: in a group chat the user says "Hey Siri, plan an outing with Wandr", an App Intent passes the chat in, Apple\'s on-device model ranks real venues, only deterministic code can lock the plan, and the chat is never stored.',
+  },
+  {
+    key: 'project.aquasense.multi_agent',
+    category: 'project',
+    // The dossier found LangChain in no repo's code; the operator confirmed it was used.
+    sourceRef: OPERATOR_CONFIRMED,
+    text: 'Built a multi-agent LangChain layer of three routable specialists in AquaSense: a health agent over live telemetry, a disease agent running computer-vision diagnosis on fish images, and a marketplace agent turning any flagged condition into a curated in-app cart.',
+  },
+  {
+    key: 'project.wandr.team_origin',
+    category: 'project',
+    sourceRef: OPERATOR_CONFIRMED,
+    text: "Wandr began as a team hackathon project whose first multiplayer backend a teammate built on Cloudflare Durable Objects and Supabase Realtime; Aryaman's own version replaced it with multiplayer built entirely on iOS with Network.framework, so friends form a room, like in Among Us, and vote on the places.",
+  },
+  {
+    key: 'project.aquasense.diagnosis',
+    category: 'project',
+    sourceRef: DOSSIER,
+    text: 'In AquaSense a farmer photographs a sick fish and a TensorFlow classifier diagnoses it, a scikit-learn Random Forest predicts water quality from pond sensors, and a marketplace flow turns a flagged condition into a shopping cart.',
+  },
+  {
+    key: 'project.aquasense.hardware',
+    category: 'project',
+    sourceRef: DOSSIER,
+    text: 'AquaSense has a hardware reflex tier: an ESP32-S3 sentinel node reading pH, turbidity, dissolved oxygen and temperature, driving an aerator and a pH doser, with LoRa telemetry. Backend commands are requests, not orders: the node can refuse anything that violates a local safety interlock, dissolved oxygen below 4.0 mg/L forces the aerator on, doses are capped, and a refused safety-critical command escalates to a human with no retry.',
+  },
+  {
+    key: 'project.aquasense.team',
+    category: 'project',
+    sourceRef: DOSSIER,
+    text: 'AquaSense was a team project: Aryaman led Team Aquacult at MLH Brainwave 2.0, and later carried AquaSense to completion.',
+  },
+  {
+    key: 'project.saldo.ai_fallback',
+    category: 'project',
+    sourceRef: DOSSIER,
+    text: "In Saldo's Android app the deterministic parser handles most bank SMS; only low-confidence messages are batched to Gemini via Firebase AI Logic with structured output and a closed category enum, redacted before leaving the device, with App Check so no API key ships in the APK, and every AI path degrades to the on-device result.",
+  },
+  {
+    key: 'achievement.hackerrank_orchestrate',
+    category: 'achievement',
+    sourceRef: DOSSIER,
+    text: 'Placed in the top 60 of 3,000+ at HackerRank Orchestrate (Sept 2026), building in 24 hours an AI financial agent that advises paying in full, in installments, or waiting.',
+  },
+  {
+    key: 'experience.smartout.installs',
+    category: 'experience',
+    sourceRef: DOSSIER,
+    // Scope unconfirmed in the dossier: the iOS app alone or both platforms. Stated
+    // about the app, so it is true either way.
+    text: 'The SmartOut app has 50K+ installs.',
+  },
+  {
+    key: 'project.aquasense.origin',
+    category: 'project',
+    // Stated by the operator on 2026-10-04: AquaSense and Team Aquacult's project are the
+    // same build. Without this, achievement.mlh_brainwave (Team Aquacult) and the
+    // AquaSense claims could only be placed side by side, never joined.
+    sourceRef: OPERATOR,
+    text: 'AquaSense, also called Aquacult, was first conceived at an event at IIT Delhi and later presented at MLH Brainwave 2.0, where Team Aquacult took 1st place over 200+ teams.',
   },
 ]
 

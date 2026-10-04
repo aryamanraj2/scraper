@@ -7,12 +7,16 @@
  * rows from F1/F2, `ApprovedClaim` rows the operator wrote. Only four commands in
  * this project reach a live source, and this is not one of them.
  *
- *   npm run drafts:run                 compose drafts for every qualified lead
+ *   npm run drafts:run                 compose drafts for qualified leads that have none yet
+ *   npm run drafts:run -- --recompose  ALSO rewrite existing unapproved drafts (drops their
+ *                                      written text until the next --drain)
  *   npm run drafts:run -- --limit 5    a first look
  *   npm run drafts:run -- --queue      queue the outreach_draft LLM tasks
  *   npm run drafts:run -- --drain      merge fulfilled tasks, then run the gate
  *   npm run drafts:run -- --gate       run the Quality Gate over composed drafts
+ *   npm run drafts:run -- --review     the approval view: every awaiting draft, title first
  *   npm run drafts:run -- --approve <id> --by <name>    freeze approval_hash (A7)
+ *   npm run drafts:run -- --revoke <id> --by <name>     withdraw ONE approval (back to composing)
  *
  * Sending is hard-disabled and stays so until F5. This produces drafts and nothing else.
  */
@@ -21,8 +25,9 @@ import { prisma, disconnectPrisma } from '../src/core/db/client.js'
 import { MILESTONE_STAGE } from '../src/core/config/stage.js'
 import { resolveSendingEnabled } from '../src/core/config/config.js'
 import { composeDrafts, gateDraft } from '../src/outreach/draft/compose.js'
-import { queueOutreachDraft, applyOutreachDraft } from '../src/outreach/draft/queue-draft.js'
-import { approveDraft } from '../src/outreach/draft/approve.js'
+import { queueOutreachDraft, applyOutreachDraft, latestFulfilledDraftTasks } from '../src/outreach/draft/queue-draft.js'
+import { approveDraft, revokeApproval } from '../src/outreach/draft/approve.js'
+import { formatDraftForReview } from '../src/outreach/draft/review.js'
 
 const args = process.argv.slice(2)
 const has = (f: string) => args.includes(f)
@@ -54,9 +59,46 @@ if (approveId) {
   process.exit(result.ok ? 0 : 1)
 }
 
+// One id, one approval withdrawn. No list form, no --all: an approval is a decision
+// about one message, and so is taking it back (§1.6).
+const revokeId = val('--revoke')
+if (revokeId) {
+  const by = val('--by') ?? 'operator'
+  const result = await revokeApproval(db, revokeId, by)
+  if (result.ok) {
+    console.log(`  revoked ${revokeId} (was ${result.revokedHash?.slice(0, 12) ?? 'no hash'}…) -> composing`)
+    console.log(`\n  Re-compose, drain and gate it; it needs a fresh approval.\n`)
+  } else {
+    console.log(`  REFUSED (${result.reason}): ${result.detail}\n`)
+  }
+  await disconnectPrisma()
+  process.exit(result.ok ? 0 : 1)
+}
+
+if (has('--review')) {
+  const drafts = await db.draft.findMany({
+    where: { status: 'awaiting_approval' },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      status: true,
+      touchSlot: true,
+      outreachCase: true,
+      subject: true,
+      bodyText: true,
+      lead: { select: { company: { select: { displayName: true } } } },
+      contact: { select: { emailNormalized: true, publicTitle: true, contactType: true, discoveryMethod: true } },
+    },
+  })
+  for (const d of drafts) console.log(formatDraftForReview({ ...d, companyName: d.lead.company.displayName }) + '\n')
+  console.log(`  ${drafts.length} draft(s) awaiting approval. Approve each one by id; there is no bulk form.\n`)
+  await disconnectPrisma()
+  process.exit(0)
+}
+
 if (!has('--gate') && !has('--drain')) {
   const limit = val('--limit') === undefined ? undefined : Number(val('--limit'))
-  const out = await composeDrafts(db, limit === undefined ? {} : { limit })
+  const out = await composeDrafts(db, { ...(limit === undefined ? {} : { limit }), recompose: has('--recompose') })
 
   console.log(`  composed ${out.draftsCreated} · updated ${out.draftsUpdated}\n`)
   for (const d of out.drafts) {
@@ -87,10 +129,7 @@ if (has('--queue')) {
 }
 
 if (has('--drain')) {
-  const tasks = await db.llmTask.findMany({
-    where: { kind: 'outreach_draft', status: 'fulfilled' },
-    select: { id: true },
-  })
+  const tasks = await latestFulfilledDraftTasks(db)
   let merged = 0
   for (const t of tasks) {
     const r = await applyOutreachDraft(db, t.id)

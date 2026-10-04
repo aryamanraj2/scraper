@@ -57,14 +57,25 @@ export type VerdictReading =
   | { ok: true; verdict: string }
   | { ok: false; reason: 'not_operator_entry' | 'truncated' | 'unparseable' | 'email_mismatch' }
 
-/** Pure. Reads the provider verdict out of one stored import line. */
-export function readProviderVerdict(input: {
+export type ImportedRowReading =
+  | { ok: true; cells: Record<string, string | undefined> }
+  | { ok: false; reason: 'not_operator_entry' | 'truncated' | 'unparseable' | 'email_mismatch' }
+
+/**
+ * Pure. Parses one stored import line back into its columns.
+ *
+ * The importer stored the operator's CSV line verbatim as the contact's Evidence
+ * excerpt, so every column the operator supplied is recoverable from the database
+ * without the CSV. Parsed with the project's own CSV parser because names, titles and
+ * notes carry quoted commas that `split(',')` would misread.
+ */
+export function readImportedRow(input: {
   excerpt: string
   sourceUrl: string
   emailNormalized: string
-}): VerdictReading {
+}): ImportedRowReading {
   // Only rows the importer wrote. Any other Evidence row is a page or a feed, and its
-  // last comma-separated token means nothing.
+  // comma-separated tokens mean nothing.
   if (!input.sourceUrl.startsWith('operator-entry://')) return { ok: false, reason: 'not_operator_entry' }
   if (input.excerpt.length >= MAX_EXCERPT_CHARS) return { ok: false, reason: 'truncated' }
 
@@ -73,10 +84,22 @@ export function readProviderVerdict(input: {
   if (parsed.rows.length !== 1 || parsed.malformed.length !== 0 || !row) {
     return { ok: false, reason: 'unparseable' }
   }
+  // The line must be about THIS contact, or every field read from it is someone else's.
   const email = row.cells['email']
   if (email === undefined || normalizeEmail(email) !== input.emailNormalized) {
     return { ok: false, reason: 'email_mismatch' }
   }
+  return { ok: true, cells: row.cells }
+}
+
+/** Pure. Reads the provider verdict out of one stored import line. */
+export function readProviderVerdict(input: {
+  excerpt: string
+  sourceUrl: string
+  emailNormalized: string
+}): VerdictReading {
+  const row = readImportedRow(input)
+  if (!row.ok) return row
   return { ok: true, verdict: row.cells['email_status'] ?? '' }
 }
 

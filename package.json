@@ -28,6 +28,7 @@
     "llm:kinds": "tsx tools/llm.ts kinds",
     "seed:tracks": "tsx tools/seed-role-tracks.ts",
     "intel:run": "tsx tools/run-intelligence.ts",
+    "research:pages": "tsx tools/research-pages.ts",
     "verify:f2": "tsx tools/verify-f2.ts",
     "seed:budget": "tsx tools/seed-global-budget.ts",
     "seed:operator": "tsx tools/seed-operator-data.ts",

@@ -39,7 +39,20 @@ export type TemplateVars = {
   roleTitle: string | null
   /** H3: a link on first contact, never an attachment. */
   resumeUrl: string
+  /** `identity.full_name`, verbatim. */
   candidateName: string
+  /** The first word of `identity.full_name`. The sign-off a person actually writes. */
+  candidateFirstName?: string
+  /** `identity.portfolio` and `identity.github`, scheme stripped, joined with " · ". */
+  candidateLinks?: string | null
+  /**
+   * The recipient's first name, from the `full_name` column of the operator's import
+   * line stored as the contact's Evidence. Null for a role inbox, and for a named
+   * contact whose stored name does not yield one (see `greeting.ts`).
+   */
+  recipientFirstName?: string | null
+  /** `voice.hook`'s text, first letter lowered and final period dropped, to open the TL;DR. */
+  hookClause?: string
 }
 
 export type SentenceTemplate = {
@@ -53,8 +66,14 @@ export const SENTENCE_TEMPLATES: SentenceTemplate[] = [
   {
     id: 'tldr.intern_inquiry@1',
     role: 'tldr',
-    render: (v) =>
-      `TL;DR — second-year CS undergrad asking whether ${v.companyName} takes engineering interns; one specific reason I'm writing to you below, resume linked.`,
+    // RETIRED (F6 step 3b), and its text deliberately deleted. It hardcoded a branch and
+    // a year of study: two candidate facts no ApprovedClaim states, sitting in a role
+    // that cites nothing, and neither was true. That is the exact smuggling route the
+    // registry exists to close. The id stays registered so a stored composition that
+    // cites it still validates; nothing may render it again.
+    render: () => {
+      throw new Error('tldr.intern_inquiry@1 is retired: it stated candidate facts no ApprovedClaim supports')
+    },
   },
   {
     id: 'tldr.posted_role@1',
@@ -117,6 +136,113 @@ export const SENTENCE_TEMPLATES: SentenceTemplate[] = [
     // `classifyReply` reads "stop" or "not interested" as an opt-out (recall over
     // precision) and suppresses, and the system sends each person one message only.
     render: (v) => v.candidateName,
+  },
+  // F6 step 3b — the operator-approved message shape. Everything here is scaffolding or
+  // a value drawn from a claim or the recipient's own Evidence; the candidate facts in
+  // the message are cited sentences (`pitch.ts`), never template text.
+  {
+    id: 'tldr.hook@2',
+    role: 'hook',
+    // A CITED role: the first clause is `voice.hook` and the sentence cites it. The
+    // template only records the shape; the second clause asserts nothing.
+    render: (v) => `tldr; ${v.hookClause ?? ''}, and I'd love to spend an internship building at ${v.companyName}.`,
+  },
+  {
+    id: 'greeting.named@1',
+    role: 'greeting',
+    render: (v) => `Hi ${v.recipientFirstName ?? 'there'},`,
+  },
+  {
+    id: 'greeting.inbox@1',
+    role: 'greeting',
+    render: () => 'Hi there,',
+  },
+  {
+    id: 'bridge.close_to_problem@1',
+    role: 'bridge',
+    render: () => "That's the kind of problem I want to be close to.",
+  },
+  {
+    id: 'ask.call@1',
+    role: 'ask',
+    render: () => 'Would you be open to a quick 15-minute call in the next couple of weeks?',
+  },
+  {
+    id: 'ask.call_or_route@1',
+    role: 'ask',
+    // A role inbox is read by someone who may not be the person to talk to, so it also
+    // gets the one-sentence way to decline: tell us who is.
+    render: () =>
+      'Would you be open to a quick 15-minute call in the next couple of weeks, or point me to whoever handles intern hiring?',
+  },
+  // Second pass of step 3b (the operator: "unnecessarily short and unnaturally direct").
+  // The ask says why a call, the inbox variant asks for a redirect politely, and the
+  // close thanks the reader. Still no fact about either party.
+  {
+    id: 'bridge.ask_intern@1',
+    role: 'bridge',
+    // Closes the opening paragraph: who I am, why you, so here is the question. The ask
+    // paragraph's "If there's room..." answers back to it.
+    render: (v) => `So I wanted to ask whether ${v.companyName} takes engineering interns.`,
+  },
+  // Fourth pass: the operator's sample drafts. Plain, short, no preamble.
+  {
+    id: 'ask.call@3',
+    role: 'ask',
+    render: () => 'Would you be open to a 15-minute call in the next couple of weeks?',
+  },
+  {
+    id: 'ask.call_or_route@3',
+    role: 'ask',
+    render: () =>
+      'Would you be open to a 15-minute call in the next couple of weeks? If this is the wrong inbox, a pointer to whoever handles intern hiring would mean a lot.',
+  },
+  {
+    id: 'signoff.plain@5',
+    role: 'signoff',
+    render: (v) =>
+      ['Thanks,', v.candidateFirstName ?? v.candidateName, ...(v.candidateLinks ? [v.candidateLinks] : [])].join('\n'),
+  },
+  {
+    id: 'ask.call@2',
+    role: 'ask',
+    render: () =>
+      "If there's room for an intern on your team, would you be open to a quick 15-minute call in the next couple of weeks?",
+  },
+  {
+    id: 'ask.call_or_route@2',
+    role: 'ask',
+    render: () =>
+      "If there's room for an intern on your team, would you be open to a quick 15-minute call in the next couple of weeks? If I've reached the wrong inbox, a pointer to whoever handles intern hiring would mean a lot.",
+  },
+  {
+    id: 'resume.link@2',
+    role: 'resume_link',
+    render: (v) => `My resume is here: ${v.resumeUrl}`,
+  },
+  {
+    id: 'signoff.plain@4',
+    role: 'signoff',
+    render: (v) =>
+      [
+        'Thanks for reading, and looking forward to hearing from you!',
+        '',
+        'Best,',
+        v.candidateFirstName ?? v.candidateName,
+        ...(v.candidateLinks ? [v.candidateLinks] : []),
+      ].join('\n'),
+  },
+  {
+    id: 'signoff.plain@3',
+    role: 'signoff',
+    render: (v) =>
+      [
+        'Looking forward to hearing from you!',
+        '',
+        'Best,',
+        v.candidateFirstName ?? v.candidateName,
+        ...(v.candidateLinks ? [v.candidateLinks] : []),
+      ].join('\n'),
   },
 ]
 

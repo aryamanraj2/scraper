@@ -29,7 +29,10 @@ import type { Db } from '../../core/audit/audit-log.js'
  * | `company` | ≥1 `evidenceId` | a Claude Code session, from quoted `Evidence` |
  * | `candidate` | ≥1 `approvedClaimId` | a session, from quoted `ApprovedClaim` |
  * | `availability` | ≥1 `approvedClaimId` | deterministic, from the claim's own words |
- * | `tldr` `resume_link` `ask` `signoff` | nothing to cite | a registered template |
+ * | `hook` `intro` | ≥1 `approvedClaimId` | deterministic, from `voice.hook` and `pitch.ts` |
+ * | `opener` | ≥1 of either | a session: the tldr, which joins the candidate to the company |
+ * | `tie` | ≥1 `evidenceId` | a session: what the projects have to do with this company |
+ * | `tldr` `resume_link` `ask` `signoff` `greeting` `bridge` | nothing to cite | a registered template |
  *
  * ## Why the uncited roles cannot smuggle a fact
  *
@@ -61,20 +64,34 @@ export const SENTENCE_ROLES = [
   'resume_link',
   'ask',
   'signoff',
+  // F6 step 3b. `hook` is the TL;DR when it quotes a claim, so it cites; `greeting`
+  // and `bridge` assert nothing and are templates.
+  'hook',
+  'greeting',
+  'bridge',
+  // Who the candidate is: its own line after the greeting.
+  'intro',
+  // F6 step 3b, fourth pass: the session-written tldr (cites claims, evidence or both)
+  // and the closing tie back to the company (cites evidence).
+  'opener',
+  'tie',
 ] as const
 export type SentenceRole = (typeof SENTENCE_ROLES)[number]
 
 /** Roles whose text is a claim about the employer, and therefore needs `Evidence`. */
-export const COMPANY_CITED_ROLES = new Set<SentenceRole>(['company'])
+export const COMPANY_CITED_ROLES = new Set<SentenceRole>(['company', 'tie'])
+
+/** Roles whose sentence may be about either party, so it must cite at least one of either. */
+export const EITHER_CITED_ROLES = new Set<SentenceRole>(['opener'])
 
 /** Roles whose text is a claim about the candidate, and therefore needs an `ApprovedClaim`. */
-export const CANDIDATE_CITED_ROLES = new Set<SentenceRole>(['candidate', 'availability'])
+export const CANDIDATE_CITED_ROLES = new Set<SentenceRole>(['candidate', 'availability', 'hook', 'intro'])
 
 /**
  * Roles that assert nothing about either party and are rendered from a registered
  * template. Anything here carries no citation, so it must carry a `templateId`.
  */
-export const TEMPLATE_ROLES = new Set<SentenceRole>(['tldr', 'resume_link', 'ask', 'signoff'])
+export const TEMPLATE_ROLES = new Set<SentenceRole>(['tldr', 'resume_link', 'ask', 'signoff', 'greeting', 'bridge'])
 
 export const DraftSentence = z.object({
   role: z.enum(SENTENCE_ROLES),
@@ -118,7 +135,7 @@ export type CompositionValidation =
  * and the draft is template spray, which is the thing §10.1 says the citation rule
  * exists to beat. `ask` is what makes it an inquiry rather than a statement.
  */
-export const REQUIRED_ROLES: SentenceRole[] = ['company', 'candidate', 'ask']
+export const REQUIRED_ROLES: SentenceRole[] = ['candidate', 'ask']
 
 /**
  * The choke point. Nothing writes `Draft.composition` without passing through here.
@@ -167,6 +184,13 @@ export async function validateComposition(
         detail: `a "${s.role}" sentence cites no ApprovedClaim: ${JSON.stringify(s.text.slice(0, 120))}`,
       }
     }
+    if (EITHER_CITED_ROLES.has(s.role) && s.evidenceIds.length + s.approvedClaimIds.length === 0) {
+      return {
+        ok: false,
+        problem: 'uncited_claim',
+        detail: `a "${s.role}" sentence cites nothing: ${JSON.stringify(s.text.slice(0, 120))}`,
+      }
+    }
     if (TEMPLATE_ROLES.has(s.role)) {
       // Free text in an unchecked role is how a company claim escapes the evidence
       // rule. A template role renders from a registered string or it does not exist.
@@ -196,6 +220,16 @@ export async function validateComposition(
     }
   }
 
+  // The load-bearing requirement used to be a `company` sentence. Since step 3b's fourth
+  // pass the company facts may sit in the tldr or the tie instead, so what is required is
+  // the thing the role stood for: at least one sentence citing Evidence.
+  if (!value.sentences.some((s) => s.evidenceIds.length > 0)) {
+    return {
+      ok: false,
+      problem: 'missing_required_role',
+      detail: 'no Evidence-cited sentence; §10.8 requires one, and without a cited company sentence this is template spray',
+    }
+  }
   const missingRole = REQUIRED_ROLES.find((r) => !value.sentences.some((s) => s.role === r))
   if (missingRole) {
     return {
@@ -243,19 +277,25 @@ export async function validateComposition(
  * directly — that would be a message nobody checked.
  */
 export function renderBody(composition: DraftComposition): string {
-  const paragraphs: string[] = []
   const take = (role: SentenceRole) => composition.sentences.filter((s) => s.role === role).map((s) => s.text)
 
-  paragraphs.push(...take('tldr'))
-  // The evidence-cited opener and the candidate's answer to it belong together: §10.8
-  // wants "one evidence-cited company sentence, one or two ApprovedClaim candidate
-  // sentences", read as a single short paragraph rather than a list of assertions.
-  const middle = [...take('company'), ...take('candidate')].join(' ')
-  if (middle) paragraphs.push(middle)
-  const closing = [...take('availability'), ...take('resume_link'), ...take('ask')].join(' ')
-  if (closing) paragraphs.push(closing)
-  paragraphs.push(...take('signoff'))
-
+  // F6 step 3b's layout, from the operator's sample drafts: the tldr; greeting; who is
+  // writing; the story; the tie back to the company; the window and the ask; the resume;
+  // the sign-off. `company`, `bridge` and `hook` are earlier shapes, kept so a stored
+  // composition still renders. A stored draft keeps the body it was approved with; this
+  // runs only when a composition is (re)composed or merged.
+  const opener = take('opener').join(' ')
+  const paragraphs = [
+    ...take('tldr'),
+    opener ? `tldr; ${opener}` : '',
+    ...take('greeting'),
+    [...take('intro'), ...take('company'), ...take('bridge')].join(' '),
+    [...take('hook'), ...take('candidate')].join(' '),
+    take('tie').join(' '),
+    [...take('availability'), ...take('ask')].join(' '),
+    ...take('resume_link'),
+    ...take('signoff'),
+  ]
   return paragraphs.filter((p) => p.trim().length > 0).join('\n\n')
 }
 

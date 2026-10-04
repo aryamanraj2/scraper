@@ -307,9 +307,43 @@ new draft carries `@2` with no decline line, and an approved `@1` draft still va
 and its hash still matches. The deviation is in F7-HANDOVER §4.5 (B4 and H6). 622 tests
 green, `verify:f4` 13/13.
 
+### Step 3 — DONE (re-compose, revoke, title-first review)
+
+Single-draft audited `drafts:run -- --revoke <id>` (approved → composing only). Used once,
+on the NanoNets draft. The composer now uses each company's latest lead, which fixed a
+bug that would have emailed 95 people twice across the September and October cycles. A
+re-composed draft resets to composing, and `--drain` uses the newest result only.
+`drafts:run -- --review` leads with the contact's title. Measured: 33 companies, 36
+drafts to 36 people (19 named, 17 alias), 34 awaiting approval and 2 deliberately
+`gate_failed` (Tempo: board-token mix-up; Duolingo: no engineering posting). **Nothing
+approved.**
+
+### Step 3b — SUPERSEDED (per-sentence LLM writing, `outreach_draft@2`)
+
+It fixed the false "second-year CS undergrad" line, which was hardcoded and bypassed
+ApprovedClaim, and it added greetings, voice claims and a page-research tool. The operator
+read the 34 results and rejected them: resume bullets pasted in, the company's marketing
+copy read back, the same voice lines in four emails, and jargon sent to recruiters. Its
+code stays committed as history. `@2` stays registered.
+
+### Step 3c — NEXT: the operator's own email (`docs/F6-EMAIL-SPEC.md`)
+
+The operator wrote the email. The LLM fills only `via`, `hook` and `scene` (each
+grounded in evidence) and picks the track and three modules. The orchestrator reviewed it
+against `approved_claim`, and the table at the top of the spec lists every correction.
+Claim `project.wandr.siri_intent` was added to `claims-data.ts` (operator-confirmed,
+built entirely by the operator). Run `npm run seed:operator` before composing. **The
+spec in `docs/` is the corrected version. Ignore any older copy of the operator's
+original code.** Generate 3 samples first (Deepgram recruiter, Strava iOS, Linear role
+inbox) and stop for the operator.
+
+**Cross-month duplicates go into step 4's scope.** The send gate's duplicate check is
+per campaign cycle (month), but §3.3 means one email per person, ever. Add a gate
+condition refusing any contact with a prior sent `SendAttempt`.
+
 ### Remaining, in order
 
-3 re-compose and revoke → 4 ingestion and the fixes above → 5
+3c the operator's email → 4 ingestion and the fixes above → 5
 signal-gated ramp → 6 dashboard send queues → 7 `verify-f6` → 8 stage commit. The operator
 chose to build all of them, step by step. Stop after each step for an orchestrator
 checkpoint. **Do not commit.** The operator commits.

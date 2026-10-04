@@ -169,6 +169,88 @@ export async function approveDraft(
   return { ok: true, draftId, approvalHash }
 }
 
+export type RevokeResult =
+  | { ok: true; draftId: string; revokedHash: string | null }
+  | { ok: false; reason: 'unknown_draft' | 'not_approved' | 'send_attempted'; detail: string }
+
+/**
+ * Withdraws one human approval, by draft id. F6-DECISIONS §8, step 3.
+ *
+ * It exists because an approval can outlive the message it approved: the one approved
+ * draft in the live database carries a `file://` resume link from before the resumes
+ * were hosted (F6-HANDOVER §4.4), and the composer rightly refuses to touch an approved
+ * row. Re-approving it would freeze a hash over a dead link again; the repair is
+ * re-composition, and this is the only way back to it.
+ *
+ * Three properties, each of them the point:
+ *
+ * - **Backward only.** `approved -> composing`, never anything else. It cannot move a
+ *   draft forward, and `composing` means the draft must be composed, drained and gated
+ *   again before a human can approve it. A revoked approval is not a pending one.
+ * - **One draft per call.** There is no bulk form, for the same reason `approveDraft` has
+ *   none (§1.6): an approval is a decision about one message, so is withdrawing it.
+ * - **Never after a send was attempted.** A `SendAttempt` means the message may already
+ *   be in someone's inbox. Unfreezing its approval then would let the row be rewritten
+ *   under a record of what was sent, which is A7's "the claim is false while the hash
+ *   still looks like proof" from the other side.
+ *
+ * The frozen hash, approver and time go into the audit row before they are cleared, so
+ * the record of what was approved survives the approval.
+ */
+export async function revokeApproval(
+  db: Db,
+  draftId: string,
+  revokedBy: string,
+): Promise<RevokeResult> {
+  const draft = await db.draft.findUnique({
+    where: { id: draftId },
+    select: { id: true, status: true, approvedAt: true, approvedBy: true, approvalHash: true, senderIdentity: true },
+  })
+  if (!draft) return { ok: false, reason: 'unknown_draft', detail: draftId }
+  if (draft.status !== 'approved' || !draft.approvedAt) {
+    return { ok: false, reason: 'not_approved', detail: `status is "${draft.status}"; only an approved draft can be revoked` }
+  }
+
+  const attempt = await db.sendAttempt.findFirst({ where: { draftId }, select: { id: true, status: true } })
+  if (attempt) {
+    return { ok: false, reason: 'send_attempted', detail: `send attempt ${attempt.id} is ${attempt.status}` }
+  }
+
+  // Conditional on the status the checks above read, so a draft that moved on in the
+  // meantime (scheduled, sending) is not dragged back by a stale read.
+  const updated = await db.draft.updateMany({
+    where: { id: draftId, status: 'approved' },
+    data: {
+      status: 'composing',
+      statusReason: null,
+      approvalHash: null,
+      approvedBy: null,
+      approvedAt: null,
+      senderIdentity: null,
+    },
+  })
+  if (updated.count !== 1) {
+    return { ok: false, reason: 'not_approved', detail: 'draft left the approved state before it could be revoked' }
+  }
+
+  await writeAudit(db, {
+    actorType: 'user',
+    actorId: revokedBy,
+    action: 'draft.approval_revoked',
+    subjectType: 'Draft',
+    subjectId: draftId,
+    metadata: {
+      revokedHash: draft.approvalHash,
+      approvedBy: draft.approvedBy,
+      approvedAt: draft.approvedAt.toISOString(),
+      senderIdentity: draft.senderIdentity,
+      movedTo: 'composing',
+    },
+  })
+
+  return { ok: true, draftId, revokedHash: draft.approvalHash }
+}
+
 /**
  * Recomputes the hash from live rows and compares it byte-for-byte with the frozen
  * value — the check F5's send gate runs immediately before the provider call (D6.1).
