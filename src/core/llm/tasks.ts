@@ -170,6 +170,63 @@ const OutreachDraftResponseV2 = z
 
 export type OutreachDraftResponseV2 = z.infer<typeof OutreachDraftResponseV2>
 
+/**
+ * `outreach_draft@3` — the operator's own email (docs/F6-EMAIL-SPEC.md). The operator
+ * read @2's 34 drafts and rejected them, then wrote the email: everything about the
+ * candidate is fixed copy (`src/outreach/draft/email.ts`), each module a registered
+ * template citing its claims. The session picks a track and three modules, writes a
+ * subject, and writes three short fields about the COMPANY, each citing Evidence. It
+ * writes nothing about the candidate, so it is offered no claims at all.
+ */
+export const EMAIL_TRACKS = ['ai', 'ios', 'android', 'backend'] as const
+export type EmailTrack = (typeof EMAIL_TRACKS)[number]
+export const EMAIL_MODULE_IDS = [
+  'privacy_saldo', 'correctness_saldo', 'honest_aquasense', 'voice_aquasense',
+  'both_wandr', 'safe_airtel', 'speed_airtel', 'ownership_smartout', 'users_examcell',
+] as const
+export type EmailModuleId = (typeof EMAIL_MODULE_IDS)[number]
+
+const Grounded = (max: number) =>
+  z.object({ text: z.string().min(1).max(max), evidenceIds: z.array(z.string().min(1)).min(1) })
+
+const OutreachDraftResponseV3 = z.object({
+  track: z.enum(EMAIL_TRACKS),
+  modules: z.tuple([z.enum(EMAIL_MODULE_IDS), z.enum(EMAIL_MODULE_IDS), z.enum(EMAIL_MODULE_IDS)]),
+  subject: z.string().min(10).max(70),
+  /** "writing after <via>": a real, specific trigger, from evidence. */
+  via: Grounded(60).optional(),
+  /** The company's product restated as its user's problem. */
+  hook: Grounded(400),
+  /** One concrete moment at the company where the candidate's work shows up. */
+  scene: Grounded(300),
+})
+
+export type OutreachDraftResponseV3 = z.infer<typeof OutreachDraftResponseV3>
+
+/**
+ * `outreach_draft@4` — the Temple workflow. @3 froze every candidate paragraph, which
+ * stopped false claims but read as a list. Here the session writes the whole middle,
+ * as the operator's Claude chat did for Temple, and code checks the facts instead of
+ * the wording: every sentence cites what it rests on, and `factCheck` refuses any
+ * number, name or link its citations do not contain (`email.ts`).
+ */
+const EvidenceLine = CitedLine.extend({ evidenceIds: z.array(z.string().min(1)).min(1) })
+const OutreachDraftResponseV4 = z.object({
+  track: z.enum(EMAIL_TRACKS),
+  subject: z.string().min(10).max(70),
+  /** Rendered "TLDR: <text>". About the candidate and the company, so it may cite either. */
+  tldr: CitedLine.refine((l) => l.evidenceIds.length + l.approvedClaimIds.length > 0, 'the tldr cites nothing'),
+  via: Grounded(60).optional(),
+  /** One specific thing at the company, as its users' problem. */
+  hook: EvidenceLine,
+  /** Paragraphs about the candidate, each citing the claims it rests on. */
+  story: z.array(CitedLine.extend({ approvedClaimIds: z.array(z.string().min(1)).min(1) })).min(2).max(4),
+  /** The moment at the company where that work shows up. */
+  scene: EvidenceLine,
+})
+
+export type OutreachDraftResponseV4 = z.infer<typeof OutreachDraftResponseV4>
+
 export const LLM_TASK_KINDS = {
   researchBrief: 'research_brief',
   packetAnswers: 'packet_answers',
@@ -213,6 +270,20 @@ export const LLM_TASK_SCHEMAS: LlmTaskSchemaEntry[] = [
     schema: OutreachDraftResponseV2,
     description:
       'The company-specific parts of an outreach message: subject, a 1-3 sentence tldr, a 2-6 sentence story of the most relevant projects, and an optional closing tie. Every sentence cites claims and/or evidence from the allow-sets.',
+  },
+  {
+    kind: LLM_TASK_KINDS.outreachDraft,
+    promptVersion: 'outreach_draft@3',
+    schema: OutreachDraftResponseV3,
+    description:
+      "The operator's email: pick a track and three modules, write the subject, and write via (optional), hook and scene about the company, each citing Evidence from the allow-set. Everything else is fixed copy.",
+  },
+  {
+    kind: LLM_TASK_KINDS.outreachDraft,
+    promptVersion: 'outreach_draft@4',
+    schema: OutreachDraftResponseV4,
+    description:
+      "The Temple workflow: pick a track, write the subject, tldr, via (optional), hook, 2-4 story paragraphs and the scene. Company sentences cite Evidence, candidate sentences cite claims, and every number, name and link must be in what they cite.",
   },
 ]
 

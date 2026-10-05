@@ -18,7 +18,7 @@ import {
 import { selectContactSlots } from './slots.js'
 import { renderTemplate, TEMPLATE_IDS, type TemplateVars } from './templates.js'
 import { GATE_VERSION, runQualityGate } from './quality-gate.js'
-import { INTRO, type PitchSentence } from './pitch.js'
+import { INTRO, WINDOW, type PitchSentence } from './pitch.js'
 import { recipientFirstName } from './greeting.js'
 import { partitionEvidenceByScope } from './evidence-scope.js'
 
@@ -71,15 +71,17 @@ export type ComposeOptions = {
    * gated drafts back to `composing` minutes before the operator's review.
    */
   recompose?: boolean
+  /** Only these companies, by display name: a sample run touches nothing else. */
+  companyNames?: string[]
+  /** Only these existing drafts; nothing new is created. A company can hold two. */
+  onlyDraftIds?: string[]
 }
 
 /** Statuses a composer may overwrite. Everything later is an approval or a record of a send. */
 const RECOMPOSABLE = new Set(['composing', 'quality_gate', 'gate_failed', 'awaiting_approval'])
 
 /** The claim keys the deterministic sentences draw on. */
-const AVAILABILITY_CLAIM_KEY = 'eligibility.internship_window'
 const NAME_CLAIM_KEY = 'identity.full_name'
-const SHORT_WINDOW_CLAIM_KEY = 'eligibility.internship_window_short'
 const LINK_CLAIM_KEYS = ['identity.portfolio', 'identity.github']
 
 export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<ComposeOutcome> {
@@ -93,7 +95,10 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
   }
 
   const leads = await db.lead.findMany({
-    where: { status: { in: ['qualified', 'accepted'] } },
+    where: {
+      status: { in: ['qualified', 'accepted'] },
+      ...(opts.companyNames ? { company: { displayName: { in: opts.companyNames } } } : {}),
+    },
     select: {
       id: true,
       status: true,
@@ -270,6 +275,7 @@ export async function composeDrafts(db: Db, opts: ComposeOptions = {}): Promise<
       // approval (scheduled, sent, an outcome) is history and is never rewritten.
       if (existing?.approvedAt || (existing && !RECOMPOSABLE.has(existing.status))) continue
       if (existing && !opts.recompose) continue
+      if (opts.onlyDraftIds && !(existing && opts.onlyDraftIds.includes(existing.id))) continue
 
       const content = {
         leadId: lead.id,
@@ -384,52 +390,36 @@ export function factsFor(
 /**
  * The sentences that need no judgment, composed immediately (H10).
  *
- * The availability sentence is an `ApprovedClaim`'s own text, unreworded — F3 §4.2's
- * rule, which is what makes "every candidate sentence traces to an approved claim"
- * checkable by containment rather than by reading for smuggled facts.
+ * F6-EMAIL-SPEC (`outreach_draft@3`): the operator's email, minus what depends on the
+ * session's answer. The tldr, the modules and the resume link wait for the track and
+ * modules it picks, and `mergeV3` adds them with the via, hook and scene. The intro and
+ * the window are cited sentences (`pitch.ts`); everything else is a template.
  */
 export function deterministicComposition(input: {
   vars: TemplateVars
   claimByKey: Map<string, { id: string; key: string; text: string }>
-  /** A role inbox gets "Hi there," and the ask that also invites a redirect. */
+  /** A role inbox gets "Hi <Company> team," and the ask that also asks for a redirect. */
   roleInbox: boolean
   now: Date
 }): DraftComposition {
   const { vars, claimByKey } = input
   const sentences: DraftSentence[] = []
 
-  // F6 step 3b, fourth pass: the operator's sample drafts. These are the parts that are
-  // the same for every company. The session writes the subject, tldr, story and tie
-  // (`outreach_draft@2`), and the merge places them around these.
-  sentences.push(template(vars.recipientFirstName ? 'greeting.named@1' : 'greeting.inbox@1', 'greeting', vars))
-
-  const intro = citedSentence(INTRO, claimByKey)
-  if (intro) sentences.push({ ...intro, role: 'intro' })
-
-  // The operator's short form, quoted verbatim; the long claim is the fallback.
-  const short = claimByKey.get(SHORT_WINDOW_CLAIM_KEY)
-  const long = claimByKey.get(AVAILABILITY_CLAIM_KEY)
-  const window = short ?? long
-  if (window) {
-    sentences.push({
-      role: 'availability',
-      text: short ? short.text : `I'm ${window.text.charAt(0).toLowerCase()}${window.text.slice(1)}`,
-      evidenceIds: [],
-      approvedClaimIds: [window.id],
-      templateId: null,
-      source: 'deterministic',
-    })
-  }
-
-  sentences.push(template(input.roleInbox ? 'ask.call_or_route@3' : 'ask.call@3', 'ask', vars))
-  if (vars.resumeUrl) sentences.push(template('resume.link@1', 'resume_link', vars))
-  sentences.push(template('signoff.plain@5', 'signoff', vars))
+  sentences.push(template(vars.recipientFirstName ? 'greeting.named@1' : 'greeting.team@1', 'greeting', vars))
+  const intro = citedSentence(INTRO, 'intro', claimByKey)
+  if (intro) sentences.push(intro)
+  sentences.push(template('bridge.keep_building@1', 'bridge', vars))
+  const window = citedSentence(WINDOW, 'availability', claimByKey)
+  if (window) sentences.push(window)
+  sentences.push(template(input.roleInbox ? 'ask.talk_or_route@1' : 'ask.talk@1', 'ask', vars))
+  sentences.push(template('signoff.plain@6', 'signoff', vars))
 
   return {
     subject: `Engineering internship at ${vars.companyName}`,
     sentences,
     promptVersion: null,
     composedAt: input.now.toISOString(),
+    layout: 'v3',
   }
 }
 
@@ -439,12 +429,13 @@ export function deterministicComposition(input: {
  */
 function citedSentence(
   p: PitchSentence,
+  role: DraftSentence['role'],
   claimByKey: Map<string, { id: string; key: string; text: string }>,
 ): DraftSentence | null {
   const ids = p.claimKeys.map((k) => claimByKey.get(k)?.id)
   if (ids.some((id) => id === undefined)) return null
   return {
-    role: 'candidate',
+    role,
     text: p.text,
     evidenceIds: [],
     approvedClaimIds: ids as string[],

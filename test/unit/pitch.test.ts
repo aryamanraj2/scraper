@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { APPROVED_CLAIMS } from '../../src/apply/claims/claims-data.js'
-import { ABBREVIATIONS, INTRO } from '../../src/outreach/draft/pitch.js'
+import { ABBREVIATIONS, INTRO, WINDOW } from '../../src/outreach/draft/pitch.js'
 import { SENTENCE_TEMPLATES } from '../../src/outreach/draft/templates.js'
 import { recipientFirstName } from '../../src/outreach/draft/greeting.js'
 
@@ -38,7 +38,10 @@ describe('no template states a candidate fact (F6 step 3b)', () => {
   })
 
   it('every live template renders only scaffolding and values drawn from claims or Evidence', () => {
-    for (const t of SENTENCE_TEMPLATES.filter((t) => !RETIRED.has(t.id))) {
+    // A cited template (@3's tldr and modules) states candidate facts on purpose and is
+    // bounded by its claims instead: `validateComposition` refuses it unless it cites
+    // every one of them. The rule here is for the templates that cite nothing.
+    for (const t of SENTENCE_TEMPLATES.filter((t) => !RETIRED.has(t.id) && !t.claimKeys)) {
       let text = t.render(SENTINELS)
       for (const v of Object.values(SENTINELS)) text = text.split(v).join('')
       expect(CANDIDATE_FACT.test(text), `${t.id}: ${text}`).toBe(false)
@@ -52,7 +55,7 @@ describe('no template states a candidate fact (F6 step 3b)', () => {
 })
 
 describe('the fixed intro is bounded by the claims it cites', () => {
-  const all = [INTRO]
+  const all = [INTRO, WINDOW]
   // Sentence openers, and "AI" — a word, not a fact any claim would need to state.
   const LEADING = new Set(['I', "I'm", 'My', 'On', 'During', 'At', 'The', 'It', 'This', 'AI'])
 

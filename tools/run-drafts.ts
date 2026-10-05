@@ -11,6 +11,10 @@
  *   npm run drafts:run -- --recompose  ALSO rewrite existing unapproved drafts (drops their
  *                                      written text until the next --drain)
  *   npm run drafts:run -- --limit 5    a first look
+ *   npm run drafts:run -- --company Strava --company Linear ...
+ *                                      every step below, for these companies only
+ *   npm run drafts:run -- --queue --draft <id> --draft <id>
+ *                                      queue, drain, gate or review these drafts only
  *   npm run drafts:run -- --queue      queue the outreach_draft LLM tasks
  *   npm run drafts:run -- --drain      merge fulfilled tasks, then run the gate
  *   npm run drafts:run -- --gate       run the Quality Gate over composed drafts
@@ -37,6 +41,15 @@ const val = (f: string) => {
 }
 
 const db = prisma()
+
+// Repeatable. A sample run must not re-compose or queue the other drafts.
+const repeated = (flag: string) => args.flatMap((a, i) => (a === flag && args[i + 1] ? [args[i + 1]!] : []))
+const companyNames = repeated('--company')
+const draftIds = repeated('--draft')
+const onlyCompanies = {
+  ...(companyNames.length > 0 ? { lead: { company: { displayName: { in: companyNames } } } } : {}),
+  ...(draftIds.length > 0 ? { id: { in: draftIds } } : {}),
+}
 
 // Stated on every run rather than assumed. Sending needs two independent factors and
 // this build has neither: MILESTONE_STAGE is a source constant a reviewed commit
@@ -77,7 +90,7 @@ if (revokeId) {
 
 if (has('--review')) {
   const drafts = await db.draft.findMany({
-    where: { status: 'awaiting_approval' },
+    where: { status: 'awaiting_approval', ...onlyCompanies },
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
@@ -98,7 +111,12 @@ if (has('--review')) {
 
 if (!has('--gate') && !has('--drain')) {
   const limit = val('--limit') === undefined ? undefined : Number(val('--limit'))
-  const out = await composeDrafts(db, { ...(limit === undefined ? {} : { limit }), recompose: has('--recompose') })
+  const out = await composeDrafts(db, {
+    ...(limit === undefined ? {} : { limit }),
+    ...(companyNames.length > 0 ? { companyNames } : {}),
+    ...(draftIds.length > 0 ? { onlyDraftIds: draftIds } : {}),
+    recompose: has('--recompose'),
+  })
 
   console.log(`  composed ${out.draftsCreated} · updated ${out.draftsUpdated}\n`)
   for (const d of out.drafts) {
@@ -115,7 +133,7 @@ if (!has('--gate') && !has('--drain')) {
 }
 
 if (has('--queue')) {
-  const drafts = await db.draft.findMany({ where: { approvedAt: null }, select: { id: true } })
+  const drafts = await db.draft.findMany({ where: { approvedAt: null, ...onlyCompanies }, select: { id: true } })
   let queued = 0
   const skipped: Record<string, number> = {}
   for (const d of drafts) {
@@ -129,7 +147,10 @@ if (has('--queue')) {
 }
 
 if (has('--drain')) {
-  const tasks = await latestFulfilledDraftTasks(db)
+  const scoped = new Set(
+    (await db.draft.findMany({ where: { approvedAt: null, ...onlyCompanies }, select: { id: true } })).map((d) => d.id),
+  )
+  const tasks = (await latestFulfilledDraftTasks(db)).filter((t) => scoped.has(t.subjectId))
   let merged = 0
   for (const t of tasks) {
     const r = await applyOutreachDraft(db, t.id)
@@ -141,7 +162,7 @@ if (has('--drain')) {
 
 if (has('--gate') || has('--drain')) {
   const drafts = await db.draft.findMany({
-    where: { approvedAt: null },
+    where: { approvedAt: null, ...onlyCompanies },
     select: { id: true, lead: { select: { company: { select: { displayName: true } } } } },
   })
   let passed = 0

@@ -200,3 +200,47 @@ export function assemble(draft: Draft, target: Target): { subject: string; body:
   return { subject: draft.subject, body, resumeUrl };
 }
 ```
+
+## Appendix: the operator's Temple email, the style model for `via`, `hook` and `scene`
+
+Hand-written by the operator, for one company. **Use it for style only. Never cite it
+as fact.** It shows what the three LLM fields should read like:
+
+- **via:** "writing after Dev's post". A real, specific trigger, taken from evidence.
+- **hook:** "Most people will only ever see Temple as a number on their phone. That number
+  is personal, it changes every second, and people will want it explained." The
+  company's product restated as **its user's problem**, in plain words. Not the
+  company's marketing copy.
+- **scene:** "For Temple, that means asking Siri why your Entropy spiked this afternoon
+  and getting an answer grounded in what the sensor saw, without your data leaving the
+  phone." One concrete moment in **their** product, using the product's own names, where
+  the candidate's work shows up.
+
+Do not copy three things from it, because the spec supersedes them:
+
+- "It reads bank SMS with a Core ML model I trained and never sends anything off the
+  phone" merges Saldo's two builds. Use the spec's `privacy_saldo`.
+- "ECE" is dropped, on the operator's instruction.
+- "my resume is attached". The system links the resume and never attaches it (H3).
+
+```
+Subject: iOS + on-device AI
+
+tldr; I build iOS apps where the AI runs on your phone and isn't allowed to make things up. Temple's app will need both, and I'd love to help build it.
+
+Hi Temple team,
+
+I'm Aryaman, a third-year ECE student at NSUT Delhi, writing after Dev's post. Most people will only ever see Temple as a number on their phone. That number is personal, it changes every second, and people will want it explained. I've been building for exactly that.
+
+Saldo (https://github.com/aryamanraj2/Saldo) keeps data private. It reads bank SMS with a Core ML model I trained and never sends anything off the phone, and it won Apple's Swift Student Challenge. AquaSense (https://youtu.be/8BiOo1TOQ3w) keeps AI honest. A classifier diagnoses sick fish and Gemini only explains the result, and it won MLH Brainwave.
+
+Wandr (https://youtu.be/oSe_WBZzuCM) does both. On iOS 27, you open your group chat and say "Hey Siri, plan an outing with Wandr." An App Intent passes the chat to Wandr, Apple's on-device model picks the stops, and code checks every venue so nothing is invented. The chat never leaves the phone.
+
+For Temple, that means asking Siri why your Entropy spiked this afternoon and getting an answer grounded in what the sensor saw, without your data leaving the phone.
+
+I'm in Delhi, free [WINDOW], and my resume is attached. Would love to talk.
+
+Best,
+Aryaman
+aryamanj.in · github.com/aryamanraj2
+```

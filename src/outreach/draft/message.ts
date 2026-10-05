@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Db } from '../../core/audit/audit-log.js'
+import { findTemplate } from './templates.js'
 
 /**
  * The message as **sentences**, and the rule that a sentence asserting something it
@@ -32,6 +33,7 @@ import type { Db } from '../../core/audit/audit-log.js'
  * | `hook` `intro` | ≥1 `approvedClaimId` | deterministic, from `voice.hook` and `pitch.ts` |
  * | `opener` | ≥1 of either | a session: the tldr, which joins the candidate to the company |
  * | `tie` | ≥1 `evidenceId` | a session: what the projects have to do with this company |
+ * | `via` | ≥1 `evidenceId` | a session (@3): the trigger, folded into the intro |
  * | `tldr` `resume_link` `ask` `signoff` `greeting` `bridge` | nothing to cite | a registered template |
  *
  * ## Why the uncited roles cannot smuggle a fact
@@ -75,11 +77,13 @@ export const SENTENCE_ROLES = [
   // and the closing tie back to the company (cites evidence).
   'opener',
   'tie',
+  // `outreach_draft@3`: "writing after <via>", a trigger read off the company's evidence.
+  'via',
 ] as const
 export type SentenceRole = (typeof SENTENCE_ROLES)[number]
 
 /** Roles whose text is a claim about the employer, and therefore needs `Evidence`. */
-export const COMPANY_CITED_ROLES = new Set<SentenceRole>(['company', 'tie'])
+export const COMPANY_CITED_ROLES = new Set<SentenceRole>(['company', 'tie', 'via'])
 
 /** Roles whose sentence may be about either party, so it must cite at least one of either. */
 export const EITHER_CITED_ROLES = new Set<SentenceRole>(['opener'])
@@ -110,6 +114,12 @@ export const DraftComposition = z.object({
   /** Set once a `outreach_draft` task's output has been merged in. */
   promptVersion: z.string().nullable().default(null),
   composedAt: z.string().min(1),
+  /**
+   * `v3`: the operator's email layout (F6-EMAIL-SPEC). `v4`: the Temple workflow, the
+   * session's own paragraphs. Absent on every composition stored before them, which keep
+   * rendering as they did.
+   */
+  layout: z.enum(['v3', 'v4']).optional(),
 })
 export type DraftComposition = z.infer<typeof DraftComposition>
 
@@ -122,6 +132,7 @@ export type CompositionProblem =
   | 'unknown_template'
   | 'untemplated_sentence'
   | 'citation_on_template'
+  | 'reworded_template'
   | 'missing_required_role'
 
 export type CompositionValidation =
@@ -217,6 +228,21 @@ export async function validateComposition(
           detail: `a "${s.role}" template sentence carries citations; move the claim into a company or candidate sentence`,
         }
       }
+    } else if (s.templateId !== null) {
+      // A cited role carrying a templateId is the operator's fixed copy (@3). It must be
+      // registered, and fixed text must be exactly that text: "never reword a module".
+      // Its claims are checked against the template's own list below.
+      const t = findTemplate(s.templateId)
+      if (!t || !templateIds.has(s.templateId)) {
+        return { ok: false, problem: 'unknown_template', detail: `unregistered templateId "${s.templateId}"` }
+      }
+      if (t.text !== undefined && t.text !== s.text) {
+        return {
+          ok: false,
+          problem: 'reworded_template',
+          detail: `"${s.templateId}" is fixed copy and this sentence differs from it: ${JSON.stringify(s.text.slice(0, 120))}`,
+        }
+      }
     }
   }
 
@@ -253,15 +279,30 @@ export async function validateComposition(
   if (claimIds.length > 0) {
     const live = await db.approvedClaim.findMany({
       where: { id: { in: claimIds }, isActive: true },
-      select: { id: true },
+      select: { id: true, key: true },
     })
-    const found = new Set(live.map((r) => r.id))
-    const bad = claimIds.filter((id) => !found.has(id))
+    const keyById = new Map(live.map((r) => [r.id, r.key]))
+    const bad = claimIds.filter((id) => !keyById.has(id))
     if (bad.length > 0) {
       return {
         ok: false,
         problem: 'unknown_claim',
         detail: `cited claims that are not active ApprovedClaim rows: ${bad.join(', ')}`,
+      }
+    }
+    // A cited template rests on the claims it names, every one of them. Citing fewer
+    // would let a module stand on a claim the operator has since withdrawn.
+    for (const s of value.sentences) {
+      const needed = s.templateId ? findTemplate(s.templateId)?.claimKeys : undefined
+      if (!needed) continue
+      const cited = new Set(s.approvedClaimIds.map((id) => keyById.get(id)))
+      const missing = needed.filter((k) => !cited.has(k))
+      if (missing.length > 0) {
+        return {
+          ok: false,
+          problem: 'uncited_claim',
+          detail: `"${s.templateId}" rests on ${missing.join(', ')}, which it does not cite`,
+        }
       }
     }
   }
@@ -278,6 +319,42 @@ export async function validateComposition(
  */
 export function renderBody(composition: DraftComposition): string {
   const take = (role: SentenceRole) => composition.sentences.filter((s) => s.role === role).map((s) => s.text)
+
+  if (composition.layout === 'v4') {
+    // The operator's Temple email: TLDR, greeting, intro + hook + bridge, the story a
+    // paragraph at a time, the scene, then the window, resume and ask.
+    const via = take('via')[0]
+    const intro = take('intro').map((t) => (via ? t.replace(/\.$/, `, writing after ${via}.`) : t))
+    const paragraphs = [
+      ...take('opener').map((t) => `TLDR: ${t}`),
+      ...take('greeting'),
+      [...intro, ...take('company'), ...take('bridge')].join(' '),
+      ...take('candidate'),
+      take('tie').join(' '),
+      [...take('availability'), ...take('resume_link'), ...take('ask')].join(' '),
+      ...take('signoff'),
+    ]
+    return paragraphs.filter((p) => p.trim().length > 0).join('\n\n')
+  }
+
+  if (composition.layout === 'v3') {
+    // F6-EMAIL-SPEC's `assemble()`, paragraph for paragraph: modules one and two share a
+    // paragraph, the third ("does both") stands alone, and the via folds into the intro.
+    const via = take('via')[0]
+    const intro = take('intro').map((t) => (via ? t.replace(/\.$/, `, writing after ${via}.`) : t))
+    const modules = take('candidate')
+    const paragraphs = [
+      ...take('opener'),
+      ...take('greeting'),
+      [...intro, ...take('company'), ...take('bridge')].join(' '),
+      modules.slice(0, 2).join(' '),
+      modules.slice(2).join(' '),
+      take('tie').join(' '),
+      [...take('availability'), ...take('resume_link'), ...take('ask')].join(' '),
+      ...take('signoff'),
+    ]
+    return paragraphs.filter((p) => p.trim().length > 0).join('\n\n')
+  }
 
   // F6 step 3b's layout, from the operator's sample drafts: the tldr; greeting; who is
   // writing; the story; the tie back to the company; the window and the ask; the resume;

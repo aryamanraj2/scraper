@@ -1,4 +1,6 @@
 import type { SentenceRole } from './message.js'
+import { EMAIL_MODULE_IDS, EMAIL_TRACKS } from '../../core/llm/tasks.js'
+import { MODULES, ROUTE, TLDR } from './email.js'
 
 /**
  * The registered sentences a composer may emit without a citation.
@@ -60,6 +62,14 @@ export type SentenceTemplate = {
   role: SentenceRole
   /** Rendered from `TemplateVars` only — there is no free-text parameter, by design. */
   render: (v: TemplateVars) => string
+  /**
+   * A CITED template (`outreach_draft@3`): candidate copy the operator wrote, sitting in a
+   * cited role and citing these claims. `validateComposition` refuses the sentence unless
+   * it cites every one of them.
+   */
+  claimKeys?: string[]
+  /** Fixed copy. `validateComposition` refuses a sentence whose text differs by a byte. */
+  text?: string
 }
 
 export const SENTENCE_TEMPLATES: SentenceTemplate[] = [
@@ -243,6 +253,61 @@ export const SENTENCE_TEMPLATES: SentenceTemplate[] = [
         v.candidateFirstName ?? v.candidateName,
         ...(v.candidateLinks ? [v.candidateLinks] : []),
       ].join('\n'),
+  },
+  // F6-EMAIL-SPEC, `outreach_draft@3`: the operator's own email. The tldr and the modules
+  // are cited templates (see `claimKeys`); the rest is scaffolding.
+  ...EMAIL_TRACKS.map(
+    (track): SentenceTemplate => ({
+      id: `tldr.${track}@1`,
+      role: 'opener',
+      render: (v) => TLDR[track].render(v.companyName),
+      claimKeys: TLDR[track].claimKeys,
+    }),
+  ),
+  ...EMAIL_MODULE_IDS.map(
+    (id): SentenceTemplate => ({
+      id: `module.${id}@1`,
+      role: 'candidate',
+      render: () => MODULES[id].text,
+      claimKeys: MODULES[id].claimKeys,
+      text: MODULES[id].text,
+    }),
+  ),
+  {
+    id: 'greeting.team@1',
+    role: 'greeting',
+    render: (v) => `Hi ${v.companyName} team,`,
+  },
+  {
+    id: 'bridge.keep_building@1',
+    role: 'bridge',
+    render: () => "That's the problem I keep building around.",
+  },
+  {
+    // outreach_draft@4: the Temple email's own bridge.
+    id: 'bridge.built_for@1',
+    role: 'bridge',
+    render: () => "I've been building for exactly that.",
+  },
+  {
+    id: 'resume.link@3',
+    role: 'resume_link',
+    render: (v) => `My resume is here: ${v.resumeUrl}.`,
+  },
+  {
+    id: 'ask.talk@1',
+    role: 'ask',
+    render: () => 'Would love to talk.',
+  },
+  {
+    id: 'ask.talk_or_route@1',
+    role: 'ask',
+    render: () => `Would love to talk. ${ROUTE}`,
+  },
+  {
+    id: 'signoff.plain@6',
+    role: 'signoff',
+    render: (v) => ['Best,', v.candidateFirstName ?? v.candidateName, ...(v.candidateLinks ? [v.candidateLinks] : [])].join('\n'),
   },
 ]
 

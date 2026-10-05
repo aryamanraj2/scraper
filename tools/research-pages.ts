@@ -4,6 +4,7 @@
  *
  *   npm run research:pages -- --domains baseten.co,supabase.com
  *   npm run research:pages -- --domains baseten.co --paths /,/about,/company
+ *   npm run research:pages -- --domains strava.com --paths https://press.strava.com/articles/...
  *
  * Why this exists beside `intel:run --research`: that command walks the corpus
  * oldest-first and then re-scores every company. F6 step 3b needed something
@@ -58,7 +59,8 @@ for (const domain of domains) {
 }
 for (const path of paths) {
   for (const company of companies.values()) {
-    const url = `https://${company.canonicalDomain}${path}`
+    // A full URL (e.g. a press.<domain> article) is fetched as given; scope is still checked downstream.
+    const url = path.startsWith('https://') ? path : `https://${company.canonicalDomain}${path}`
     const r = await researchCompanyPage(db, gate, company, url, { sameHostDelayMs: config.DEFAULT_HOST_RATE_DELAY_MS })
     const detail = r.kind === 'refused' ? `${r.reason}: ${r.detail}` : r.kind === 'unusable' ? r.detail : ''
     console.log(`  ${url.padEnd(44)} ${r.kind}${detail ? ` (${detail.slice(0, 80)})` : ''}`)

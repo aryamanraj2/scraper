@@ -11,7 +11,8 @@ import { renderTemplate, TEMPLATE_IDS } from '../../src/outreach/draft/templates
 import { checkJurisdiction } from '../../src/outreach/draft/jurisdiction.js'
 import { runQualityGate } from '../../src/outreach/draft/quality-gate.js'
 import { selectContactSlots } from '../../src/outreach/draft/slots.js'
-import { fulfilTask, rejectTask } from '../../src/core/llm/handoff-gateway.js'
+import { fulfilTask, rejectTask, HandoffLlmGateway } from '../../src/core/llm/handoff-gateway.js'
+import { MODULES, TLDR } from '../../src/outreach/draft/email.js'
 import { resolveSendingEnabled } from '../../src/core/config/config.js'
 
 /**
@@ -155,26 +156,23 @@ async function world(opts: WorldOpts = {}) {
   return { db, company, lead, contact, evidence, resume, opportunity }
 }
 
-/** A fulfilled `outreach_draft@2` answer, so a draft can reach the gate. */
-async function fulfilDraftTask(taskId: string, over: Record<string, unknown> = {}) {
+type AnswerOverride = Record<string, unknown> | ((evidenceId: string) => Record<string, unknown>)
+
+/** A fulfilled `outreach_draft@3` answer, so a draft can reach the gate. */
+async function fulfilDraftTask(taskId: string, override: AnswerOverride = {}) {
   const db = testDb()
   const task = await db.llmTask.findUniqueOrThrow({ where: { id: taskId } })
   const evidenceId = task.allowedEvidenceIds[0]!
-  const claimId = task.allowedApprovedClaimIds[0]!
+  const over = typeof override === 'function' ? override(evidenceId) : override
   return fulfilTask(db, taskId, {
-    subject: 'Student who wants to work on Postgres at Acme',
-    tldr: [
-      {
-        text: "Acme's platform team runs Postgres at scale in Bengaluru, and that is the kind of backend work I want to learn.",
-        evidenceIds: [evidenceId],
-        approvedClaimIds: [claimId],
-      },
-    ],
-    story: [
-      { text: 'I have built backend services in Go.', approvedClaimIds: [claimId] },
-      { text: 'I wrote their tests too.', approvedClaimIds: [claimId] },
-    ],
-    tie: { text: 'I saw your platform team writes Go and runs Postgres at scale in Bengaluru.', evidenceIds: [evidenceId] },
+    track: 'backend',
+    modules: ['speed_airtel', 'users_examcell', 'correctness_saldo'],
+    subject: 'Backend internship at Acme',
+    hook: {
+      text: 'A platform team running Postgres at scale feels every slow query. The people waiting on it only see a page that hangs.',
+      evidenceIds: [evidenceId],
+    },
+    scene: { text: 'For Acme, that means a Postgres query in Bengaluru that comes back fast and right.', evidenceIds: [evidenceId] },
     ...over,
   })
 }
@@ -424,7 +422,7 @@ describe('approval_hash is frozen and compared byte-for-byte (A7)', () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
     await fulfilDraftTask(queued.taskId)
     const merged = await applyOutreachDraft(db, queued.taskId)
@@ -547,12 +545,12 @@ describe('the sign-off: @2 composes, @1 still resolves (F6-DECISIONS §3.2)', ()
     expect(renderTemplate('signoff.plain@2', vars)).toBe('Test Candidate')
   })
 
-  it('composes new drafts without the decline sentence (the newest sign-off, @5 since step 3b)', async () => {
+  it('composes new drafts without the decline sentence (the newest sign-off, @6 since the operator\'s email)', async () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { composition: true, bodyText: true } })
     const signoffs = (draft.composition as DraftComposition).sentences.filter((s) => s.role === 'signoff')
-    expect(signoffs.map((s) => s.templateId)).toEqual(['signoff.plain@5'])
+    expect(signoffs.map((s) => s.templateId)).toEqual(['signoff.plain@6'])
     expect(draft.bodyText).not.toMatch(/write again/i)
   })
 
@@ -562,7 +560,7 @@ describe('the sign-off: @2 composes, @1 still resolves (F6-DECISIONS §3.2)', ()
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
     await fulfilDraftTask(queued.taskId)
     const merged = await applyOutreachDraft(db, queued.taskId)
@@ -594,7 +592,7 @@ describe('revoking an approval, and re-composing (F6-DECISIONS §8, step 3)', ()
     const w = await world()
     await composeDrafts(w.db)
     const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(w.db, draft.id)
+    const queued = await queueOutreachDraft(w.db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
     await fulfilDraftTask(queued.taskId)
     const merged = await applyOutreachDraft(w.db, queued.taskId)
@@ -732,10 +730,10 @@ describe('revoking an approval, and re-composing (F6-DECISIONS §8, step 3)', ()
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const first = await queueOutreachDraft(db, draft.id)
+    const first = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!first.queued) throw new Error('queue failed')
     await fulfilDraftTask(first.taskId)
-    const second = await queueOutreachDraft(db, draft.id)
+    const second = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!second.queued) throw new Error('queue failed')
     expect(second.taskId).not.toBe(first.taskId)
     await fulfilDraftTask(second.taskId)
@@ -743,7 +741,7 @@ describe('revoking an approval, and re-composing (F6-DECISIONS §8, step 3)', ()
 
     // A newer task that was REJECTED supersedes too: drain must not fall back to the
     // older answer the re-queue was meant to replace.
-    const third = await queueOutreachDraft(db, draft.id)
+    const third = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!third.queued) throw new Error('queue failed')
     await rejectTask(db, third.taskId, 'weak_evidence')
     expect(await latestFulfilledDraftTasks(db)).toEqual([])
@@ -792,88 +790,272 @@ describe('the approval view puts the recipient\'s title first (F6-DECISIONS §8,
   })
 })
 
-describe('the F6 step 3b message, end to end', () => {
-  async function composed(named: boolean) {
+describe("the operator's email (outreach_draft@3, F6-EMAIL-SPEC), end to end", () => {
+  async function named(w: Awaited<ReturnType<typeof world>>) {
+    const c = await w.db.contact.update({
+      where: { id: w.contact!.id },
+      data: { emailNormalized: 'person@acme.example', contactType: 'named_talent', discoveryMethod: 'lookup_provider' },
+      select: { evidenceId: true },
+    })
+    await w.db.evidence.update({
+      where: { id: c.evidenceId },
+      data: {
+        sourceUrl: 'operator-entry://hunter/operator',
+        excerpt: 'acme.example,person@acme.example,Priya Example,Senior Recruiter,named_talent,hunter,,,valid',
+      },
+    })
+  }
+
+  /** Composes, queues and fulfils; returns the merge outcome without gating. */
+  async function answered(opts: { named?: boolean; over?: AnswerOverride } = {}) {
     const w = await world()
-    if (named) {
-      const c = await w.db.contact.update({
-        where: { id: w.contact!.id },
-        data: { emailNormalized: 'person@acme.example', contactType: 'named_talent', discoveryMethod: 'lookup_provider' },
-        select: { evidenceId: true },
-      })
-      await w.db.evidence.update({
-        where: { id: c.evidenceId },
-        data: {
-          sourceUrl: 'operator-entry://hunter/operator',
-          excerpt: 'acme.example,person@acme.example,Priya Example,Senior Recruiter,named_talent,hunter,,,valid',
-        },
-      })
-    }
+    if (opts.named) await named(w)
     await composeDrafts(w.db)
     const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(w.db, draft.id)
+    const queued = await queueOutreachDraft(w.db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(`queue failed: ${queued.reason}`)
-    await fulfilDraftTask(queued.taskId, { subject: 'A subject the session wrote' })
+    const fulfilled = await fulfilDraftTask(queued.taskId, opts.over)
+    if (!fulfilled.ok) throw new Error(`fulfil failed: ${fulfilled.problem} ${fulfilled.detail}`)
     const merged = await applyOutreachDraft(w.db, queued.taskId)
-    if (!merged.merged) throw new Error(`merge failed: ${merged.reason} ${merged.detail}`)
-    const gated = await gateDraft(w.db, draft.id)
+    return { ...w, draftId: draft.id, taskId: queued.taskId, merged }
+  }
+
+  async function composed(opts: { named?: boolean; over?: AnswerOverride } = {}) {
+    const w = await answered(opts)
+    if (!w.merged.merged) throw new Error(`merge failed: ${w.merged.reason} ${w.merged.detail}`)
+    const gated = await gateDraft(w.db, w.draftId)
     if (!gated.ok) throw new Error(`gate failed: ${gated.detail}`)
-    const row = await w.db.draft.findUniqueOrThrow({ where: { id: draft.id }, select: { subject: true, bodyText: true, composition: true } })
+    const row = await w.db.draft.findUniqueOrThrow({
+      where: { id: w.draftId },
+      select: { subject: true, bodyText: true, composition: true, resumeVersionId: true },
+    })
     return { ...w, ...row, sentences: (row.composition as DraftComposition).sentences }
   }
 
-  it('reads like the operator\'s samples: tldr, greeting, who I am, story, tie, ask, resume, thanks', async () => {
-    const { subject, bodyText } = await composed(false)
-    // The session's subject, written for this company, is the one used.
-    expect(subject).toBe('A subject the session wrote')
+  it("assembles exactly the spec's layout, around the session's three fields", async () => {
+    const { subject, bodyText } = await composed()
+    expect(subject).toBe('Backend internship at Acme')
     expect(bodyText!.split('\n\n')).toEqual([
-      "tldr; Acme's platform team runs Postgres at scale in Bengaluru, and that is the kind of backend work I want to learn.",
-      'Hi there,',
-      "I'm Aryaman, a third-year B.Tech student at NSUT Delhi, graduating 2028.",
-      'I have built backend services in Go. I wrote their tests too.',
-      'I saw your platform team writes Go and runs Postgres at scale in Bengaluru.',
-      "I'm free Dec 2026 to Jan 2027, or Jun to Aug 2027. Would you be open to a 15-minute call in the next couple of weeks? If this is the wrong inbox, a pointer to whoever handles intern hiring would mean a lot.",
-      'Resume: https://cv.example/backend.pdf',
-      'Thanks,\nAryaman\naryamanj.in · github.com/aryamanraj2',
+      "tldr; I like making slow, messy systems fast and correct. Acme is that problem at a scale I'd love to learn from.",
+      'Hi Acme team,',
+      "I'm Aryaman, a third-year student at NSUT Delhi. A platform team running Postgres at scale feels every slow query. The people waiting on it only see a page that hangs. That's the problem I keep building around.",
+      `${MODULES.speed_airtel.text} ${MODULES.users_examcell.text}`,
+      MODULES.correctness_saldo.text,
+      'For Acme, that means a Postgres query in Bengaluru that comes back fast and right.',
+      "I'm looking for an internship from Dec 2026 to Jan 2027, or Jun to Aug 2027. My resume is here: https://cv.example/backend.pdf. Would love to talk. If this isn't the right inbox, a pointer to whoever handles intern hiring would mean a lot.",
+      'Best,\nAryaman\naryamanj.in · github.com/aryamanraj2',
     ])
   })
 
-  it('greets a named contact by the first name stored in their import line, and asks without the redirect', async () => {
-    const { bodyText } = await composed(true)
+  it('folds a via into the intro, and greets a named contact by first name without the route line', async () => {
+    const { bodyText } = await composed({
+      named: true,
+      over: (e) => ({ via: { text: 'your platform team post', evidenceIds: [e] } }),
+    })
     expect(bodyText).toContain('\n\nHi Priya,\n\n')
-    expect(bodyText).toContain('in the next couple of weeks?')
-    expect(bodyText).not.toContain('wrong inbox')
+    expect(bodyText).toContain('NSUT Delhi, writing after your platform team post. A platform team')
+    expect(bodyText).toContain('Would love to talk.\n\n')
+    expect(bodyText).not.toContain('right inbox')
   })
 
-  it('cites the claims behind the intro and the window, and every session line cites something', async () => {
-    const { db, sentences } = await composed(false)
+  it('the session writes only via, hook and scene; every candidate sentence is fixed copy citing its claims', async () => {
+    const { db, sentences } = await composed()
+    expect(sentences.filter((s) => s.source === 'llm').map((s) => s.role)).toEqual(['company', 'tie'])
+    const modules = sentences.filter((s) => s.role === 'candidate')
+    expect(modules.map((s) => s.templateId)).toEqual(['module.speed_airtel@1', 'module.users_examcell@1', 'module.correctness_saldo@1'])
     const keys = async (ids: string[]) =>
       (await db.approvedClaim.findMany({ where: { id: { in: ids } }, select: { key: true } })).map((c) => c.key).sort()
+    expect(await keys(modules[0]!.approvedClaimIds)).toEqual([...MODULES.speed_airtel.claimKeys].sort())
+    expect(await keys(sentences.find((s) => s.role === 'opener')!.approvedClaimIds)).toEqual([...TLDR.backend.claimKeys].sort())
     expect(await keys(sentences.find((s) => s.role === 'intro')!.approvedClaimIds)).toEqual(
-      ['education.degree', 'education.expected_graduation', 'education.year_of_study', 'identity.full_name'],
+      ['education.degree', 'education.year_of_study', 'identity.full_name'],
     )
-    expect(await keys(sentences.find((s) => s.role === 'availability')!.approvedClaimIds)).toEqual(['eligibility.internship_window_short'])
-    for (const s of sentences.filter((s) => s.source === 'llm')) {
-      expect(s.evidenceIds.length + s.approvedClaimIds.length, s.text).toBeGreaterThan(0)
+    expect(await keys(sentences.find((s) => s.role === 'availability')!.approvedClaimIds)).toEqual(['eligibility.internship_window'])
+  })
+
+  it("links the resume of the EMAIL's track, not the lead's scored track", async () => {
+    // The old path sent ai.pdf with a mobile email to Strava. The lead here scores `sde`.
+    const w = await world()
+    const ios = await w.db.resumeVersion.create({
+      data: { label: 'iOS / Android — iOS lead', trackKey: 'ios_android', linkUrl: 'https://cv.example/ios.pdf', filePath: '/i.pdf', fileSha256: 'c'.repeat(64) },
+      select: { id: true },
+    })
+    await composeDrafts(w.db)
+    const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
+    const queued = await queueOutreachDraft(w.db, draft.id, 'outreach_draft@3')
+    if (!queued.queued) throw new Error(queued.reason)
+    // Short fields: the iOS trio is the longest (120 words), and a role inbox adds the
+    // route line, which leaves 27 of the spec's 240 words for hook and scene.
+    await fulfilDraftTask(queued.taskId, (e) => ({
+      track: 'ios',
+      modules: ['privacy_saldo', 'ownership_smartout', 'both_wandr'],
+      hook: { text: 'Slow Postgres queries hang the page.', evidenceIds: [e] },
+      scene: { text: 'For Acme, that means fast queries.', evidenceIds: [e] },
+    }))
+    const merged = await applyOutreachDraft(w.db, queued.taskId)
+    if (!merged.merged) throw new Error(`${merged.reason} ${merged.detail}`)
+    const row = await w.db.draft.findUniqueOrThrow({ where: { id: draft.id }, select: { resumeVersionId: true, bodyText: true } })
+    expect(row.resumeVersionId).toBe(ios.id)
+    expect(row.bodyText).toContain('My resume is here: https://cv.example/ios.pdf.')
+    expect(row.bodyText).toContain("tldr; I build iOS apps")
+  })
+
+  it("refuses an answer that breaks the spec's rules, and merges nothing", async () => {
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [{ modules: ['speed_airtel', 'safe_airtel', 'users_examcell'] }, /different projects/],
+      [{ modules: ['both_wandr', 'honest_aquasense', 'safe_airtel'] }, /lastOnly/],
+      [{ modules: ['privacy_saldo', 'honest_aquasense', 'both_wandr'] }, /no module carries the "backend" track/],
+      [{ subject: 'Backend internship at Acme, 2027' }, /subject: no numbers/],
+    ]
+    for (const [over, why] of cases) {
+      const w = await answered({ over })
+      expect(w.merged, JSON.stringify(over)).toMatchObject({ merged: false, reason: 'email_rules' })
+      if (!w.merged.merged) expect(w.merged.detail).toMatch(why)
+      expect((await w.db.draft.findUniqueOrThrow({ where: { id: w.draftId } })).promptVersion).toBeNull()
+      await truncateAll()
     }
   })
 
-  it('takes the subject, tldr, story and tie from the session, and nothing else', async () => {
-    const { sentences } = await composed(false)
-    expect(sentences.filter((s) => s.source === 'llm').map((s) => s.role)).toEqual(['opener', 'candidate', 'candidate', 'tie'])
-    expect(sentences.filter((s) => s.source === 'deterministic').map((s) => s.role)).toEqual(
-      ['greeting', 'intro', 'availability', 'ask', 'resume_link', 'signoff'],
-    )
+  it('refuses a number in the hook that its cited evidence does not contain', async () => {
+    const { merged } = await answered({ over: (e) => ({ hook: { text: 'Acme serves 4 million people.', evidenceIds: [e] } }) })
+    expect(merged).toMatchObject({ merged: false, reason: 'email_rules' })
+    if (!merged.merged) expect(merged.detail).toContain('number "4" not in cited evidence')
+  })
+
+  it('never lets a module be reworded, or stand on fewer claims than it rests on', async () => {
+    const { db, composition } = await composed()
+    const c = composition as DraftComposition
+    const reworded: DraftComposition = {
+      ...c,
+      sentences: c.sentences.map((s) => (s.templateId === 'module.speed_airtel@1' ? { ...s, text: s.text.replace('30%', '60%') } : s)),
+    }
+    expect(await validateComposition(db, reworded, TEMPLATE_IDS)).toMatchObject({ ok: false, problem: 'reworded_template' })
+    const thinned: DraftComposition = {
+      ...c,
+      sentences: c.sentences.map((s) => (s.templateId === 'module.speed_airtel@1' ? { ...s, approvedClaimIds: s.approvedClaimIds.slice(1) } : s)),
+    }
+    expect(await validateComposition(db, thinned, TEMPLATE_IDS)).toMatchObject({ ok: false, problem: 'uncited_claim' })
+  })
+
+  it('never merges a stale @2 answer onto an @3 composition', async () => {
+    const { db } = await world()
+    await composeDrafts(db)
+    const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
+    const { taskId } = await new HandoffLlmGateway(db).enqueue({
+      kind: 'outreach_draft',
+      promptVersion: 'outreach_draft@2',
+      input: {},
+      allowedEvidenceIds: [(await db.evidence.findFirstOrThrow({ select: { id: true } })).id],
+      allowedApprovedClaimIds: [(await db.approvedClaim.findFirstOrThrow({ select: { id: true } })).id],
+      subjectType: 'Draft',
+      subjectId: draft.id,
+    })
+    const task = await db.llmTask.findUniqueOrThrow({ where: { id: taskId } })
+    const claim = task.allowedApprovedClaimIds[0]!
+    const ok = await fulfilTask(db, taskId, {
+      subject: 'Old shape',
+      tldr: [{ text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] }],
+      story: [
+        { text: 'I write Go.', approvedClaimIds: [claim] },
+        { text: 'I test it.', approvedClaimIds: [claim] },
+      ],
+    })
+    expect(ok.ok).toBe(true)
+    expect(await applyOutreachDraft(db, taskId)).toMatchObject({ merged: false, reason: 'version_mismatch' })
   })
 
   it('never names the branch of study, or the old hardcoded guess at it', async () => {
     // Read from the degree claim rather than written here: the operator does not want
     // the branch named anywhere, and that includes this repository.
-    const { db, bodyText } = await composed(false)
+    const { db, bodyText } = await composed()
     const degree = await db.approvedClaim.findUniqueOrThrow({ where: { key: 'education.degree' } })
     const branch = /Technology in (.+?) at /.exec(degree.text)![1]!
     expect(bodyText!.toLowerCase()).not.toContain(branch.toLowerCase())
-    expect(bodyText).not.toMatch(/undergrad|second-year|\bCS\b/)
+    expect(bodyText).not.toMatch(/undergrad|second-year|\bCS\b|\bECE\b/)
+  })
+})
+
+describe('the Temple workflow (outreach_draft@4), end to end', () => {
+  /** Composes, queues @4 (the default) and fulfils; story claims are looked up by key. */
+  async function answered(over: (ids: { e: string; c: (k: string) => string }) => Record<string, unknown> = () => ({})) {
+    const w = await world()
+    await composeDrafts(w.db)
+    const draft = await w.db.draft.findFirstOrThrow({ select: { id: true } })
+    const queued = await queueOutreachDraft(w.db, draft.id)
+    if (!queued.queued) throw new Error(queued.reason)
+    const task = await w.db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
+    const claims = (task.input as { claims: { approvedClaimId: string; key: string }[] }).claims
+    const c = (k: string) => claims.find((x) => x.key === k)!.approvedClaimId
+    const e = task.allowedEvidenceIds[0]!
+    const fulfilled = await fulfilTask(w.db, queued.taskId, {
+      track: 'backend',
+      subject: "Intern who wants to build Acme's platform",
+      tldr: { text: "I like making slow systems fast and correct. Acme's platform team needs exactly that.", evidenceIds: [e], approvedClaimIds: [c('experience.airtel.openstack')] },
+      hook: { text: "Acme's platform team runs Postgres at scale in Bengaluru. Every slow query lands on someone waiting.", evidenceIds: [e] },
+      story: [
+        { text: 'At Bharti Airtel, I cut dashboard query latency by 30% with composite indexing and cursor-based pagination.', approvedClaimIds: [c('experience.airtel.role'), c('experience.airtel.openstack')] },
+        { text: "At NSUT's Examination Cell, I built a platform serving 10,000+ students.", approvedClaimIds: [c('experience.nsut.role'), c('experience.nsut.platform')] },
+      ],
+      scene: { text: 'For Acme, that means a Postgres query in Bengaluru that comes back fast and right.', evidenceIds: [e] },
+      ...over({ e, c }),
+    })
+    if (!fulfilled.ok) throw new Error(`fulfil failed: ${fulfilled.problem} ${fulfilled.detail}`)
+    return { ...w, task, draftId: draft.id, merged: await applyOutreachDraft(w.db, queued.taskId) }
+  }
+
+  it("assembles the Temple layout around the session's paragraphs, and passes the gate", async () => {
+    const w = await answered()
+    if (!w.merged.merged) throw new Error(`${w.merged.reason} ${w.merged.detail}`)
+    expect((await gateDraft(w.db, w.draftId)).ok).toBe(true)
+    const { bodyText } = await w.db.draft.findUniqueOrThrow({ where: { id: w.draftId }, select: { bodyText: true } })
+    expect(bodyText!.split('\n\n')).toEqual([
+      "TLDR: I like making slow systems fast and correct. Acme's platform team needs exactly that.",
+      'Hi Acme team,',
+      "I'm Aryaman, a third-year student at NSUT Delhi. Acme's platform team runs Postgres at scale in Bengaluru. Every slow query lands on someone waiting. I've been building for exactly that.",
+      'At Bharti Airtel, I cut dashboard query latency by 30% with composite indexing and cursor-based pagination.',
+      "At NSUT's Examination Cell, I built a platform serving 10,000+ students.",
+      'For Acme, that means a Postgres query in Bengaluru that comes back fast and right.',
+      "I'm free Dec 2026 to Jan 2027, or Jun to Aug 2027. My resume is here: https://cv.example/backend.pdf. Would love to talk. If this isn't the right inbox, a pointer to whoever handles intern hiring would mean a lot.",
+      'Best,\nAryaman\naryamanj.in · github.com/aryamanraj2',
+    ])
+  })
+
+  it('offers the claims as the résumé, but never the phone number or email', async () => {
+    const { task } = await answered()
+    expect(task.promptVersion).toBe('outreach_draft@4')
+    expect(task.allowedApprovedClaimIds.length).toBeGreaterThan(10)
+    expect(JSON.stringify(task.input)).not.toContain('identity.phone')
+    expect(JSON.stringify(task.input)).not.toContain('identity.email')
+  })
+
+  it('refuses a number or an employer the cited claims do not hold, and merges nothing', async () => {
+    const forged = await answered(({ c }) => ({
+      story: [
+        { text: 'At Bharti Airtel, I cut query latency by 40%.', approvedClaimIds: [c('experience.airtel.role'), c('experience.airtel.openstack')] },
+        { text: 'Before that, I interned at Google.', approvedClaimIds: [c('experience.nsut.role')] },
+      ],
+    }))
+    expect(forged.merged).toMatchObject({ merged: false, reason: 'email_rules' })
+    if (!forged.merged.merged) expect(forged.merged.detail).toMatch(/"40%".*"Google"/)
+    const { composition } = await forged.db.draft.findUniqueOrThrow({ where: { id: forged.draftId }, select: { composition: true } })
+    expect((composition as DraftComposition).layout).toBe('v3')
+  })
+
+  it("refuses a tldr promising Android with the iOS resume (the operator's Strava review)", async () => {
+    const w = await answered(({ e }) => ({
+      track: 'ios',
+      tldr: { text: "I build iOS/Android apps where the AI isn't allowed to make things up.", evidenceIds: [e] },
+    }))
+    // No iOS resume exists in this world, so the track must be refused before anything else;
+    // with one, the platform rule fires.
+    expect(w.merged).toMatchObject({ merged: false })
+    await w.db.resumeVersion.create({
+      data: { label: 'iOS / Android — iOS lead', trackKey: 'ios_android', linkUrl: 'https://cv.example/ios.pdf', filePath: '/i.pdf', fileSha256: 'c'.repeat(64) },
+    })
+    const task = await w.db.llmTask.findFirstOrThrow({ where: { subjectId: w.draftId, status: 'fulfilled' }, orderBy: { createdAt: 'desc' } })
+    const again = await applyOutreachDraft(w.db, task.id)
+    expect(again).toMatchObject({ merged: false, reason: 'email_rules' })
+    if (!again.merged) expect(again.detail).toContain('says Android')
   })
 })
 
@@ -907,7 +1089,7 @@ describe('a draft never says anything about a DIFFERENT company', () => {
 
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
 
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
@@ -937,7 +1119,7 @@ describe('a draft never says anything about a DIFFERENT company', () => {
     })
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
     await fulfilDraftTask(queued.taskId)
     await applyOutreachDraft(db, queued.taskId)
@@ -975,7 +1157,7 @@ describe('a draft never says anything about a DIFFERENT company', () => {
     })
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
     expect(task.allowedEvidenceIds).toContain(ats.id)
@@ -987,69 +1169,39 @@ describe('the LLM boundary (docs/handoff-llm-gateway.md)', () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
-
-    const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
-    const claim = task.allowedApprovedClaimIds[0]!
-    const result = await fulfilTask(db, queued.taskId, {
-      subject: 'Student who wants to work at Acme',
-      tldr: [{ text: 'Acme runs Postgres.', evidenceIds: ['forged-evidence-id'] }],
-      story: [
-        { text: 'I write Go.', approvedClaimIds: [claim] },
-        { text: 'I test it.', approvedClaimIds: [claim] },
-      ],
-    })
+    const result = await fulfilDraftTask(queued.taskId, { scene: { text: 'For Acme, a solar farm.', evidenceIds: ['forged-evidence-id'] } })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.problem).toBe('uncited_evidence')
   })
 
-  it('refuses an answer citing an approved claim outside the allow-set', async () => {
+  it('offers the session no claims at all: under @3 it writes nothing about the candidate', async () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
-
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
-    const result = await fulfilTask(db, queued.taskId, {
-      subject: 'Student who wants to work at Acme',
-      tldr: [{ text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] }],
-      story: [
-        { text: 'I write Go.', approvedClaimIds: ['forged-claim-id'] },
-        { text: 'I test it.', approvedClaimIds: ['forged-claim-id'] },
-      ],
-    })
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.problem).toBe('uncited_claim')
+    expect(task.promptVersion).toBe('outreach_draft@3')
+    expect(task.allowedApprovedClaimIds).toEqual([])
+    expect(JSON.stringify(task.input)).not.toContain('approvedClaimId')
   })
 
-  it('refuses an answer that cites no Evidence anywhere, or a tldr line citing nothing — SCHEMA errors', async () => {
+  it('refuses an uncited hook, scene or via, and a missing scene — SCHEMA errors', async () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
-
-    const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
-    const claim = task.allowedApprovedClaimIds[0]!
-    const story = [
-      { text: 'I write Go.', approvedClaimIds: [claim] },
-      { text: 'I test it.', approvedClaimIds: [claim] },
-    ]
-    const noEvidence = await fulfilTask(db, queued.taskId, {
-      subject: 'Student who wants to work at Acme',
-      tldr: [{ text: 'I like backends.', approvedClaimIds: [claim] }],
-      story,
-    })
-    expect(noEvidence).toMatchObject({ ok: false, problem: 'schema_mismatch' })
-    const uncitedLine = await fulfilTask(db, queued.taskId, {
-      subject: 'Student who wants to work at Acme',
-      tldr: [{ text: 'Acme is great.' }],
-      story,
-      tie: { text: 'Acme runs Postgres.', evidenceIds: [task.allowedEvidenceIds[0]!] },
-    })
-    expect(uncitedLine).toMatchObject({ ok: false, problem: 'schema_mismatch' })
+    for (const over of [
+      { hook: { text: 'Acme is great.', evidenceIds: [] } },
+      { via: { text: 'a post', evidenceIds: [] } },
+      { scene: undefined },
+      { modules: ['speed_airtel', 'users_examcell'] },
+    ]) {
+      expect(await fulfilDraftTask(queued.taskId, over), JSON.stringify(over)).toMatchObject({ ok: false, problem: 'schema_mismatch' })
+    }
   })
 
   it('never puts the recipient address in the task payload', async () => {
@@ -1058,7 +1210,7 @@ describe('the LLM boundary (docs/handoff-llm-gateway.md)', () => {
     const { db } = await world()
     await composeDrafts(db)
     const draft = await db.draft.findFirstOrThrow({ select: { id: true } })
-    const queued = await queueOutreachDraft(db, draft.id)
+    const queued = await queueOutreachDraft(db, draft.id, 'outreach_draft@3')
     if (!queued.queued) throw new Error(queued.reason)
     const task = await db.llmTask.findUniqueOrThrow({ where: { id: queued.taskId } })
     expect(JSON.stringify(task.input)).not.toContain('careers@acme.example')
